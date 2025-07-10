@@ -1,107 +1,154 @@
-# main.py (Versión Refactorizada y Mejorada)
+# main.py (Versión Refactorizada y Mejorada por Agente)
 
 # Importamos las librerías necesarias
-import os
-import firebase_admin
-from firebase_admin import credentials, firestore
-from selenium import webdriver
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from bs4 import BeautifulSoup
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from dotenv import load_dotenv
+import argparse
+import json
+import logging
 from typing import Dict, List, Optional
 
-# Carga las variables de entorno desde el archivo .env
-load_dotenv()
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
+
+# --- CONFIGURACIÓN DE LOGGING ---
+# Reemplazamos print() por un sistema de logging más robusto
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- CONSTANTES DE CONFIGURACIÓN Y LOCALIZADORES ---
-# Mover los localizadores aquí hace que el código sea más fácil de mantener.
 URL_LOGIN = "https://segreteria.unigre.it/asp/authenticate.asp"
-USUARIO = os.getenv("USUARIO_UNIGRE")
-CONTRASENA = os.getenv("CONTRASENA_UNIGRE")
-FIREBASE_CREDS_PATH = "credenciales.json"
 
 # Localizadores de Selenium
 LOGIN_USER_FIELD = (By.NAME, 'txtName')
 LOGIN_PASS_FIELD = (By.NAME, 'txtPassword')
 LOGIN_BUTTON = (By.CLASS_NAME, 'verdanaCorpo12B_2')
+LOGIN_ERROR_MESSAGE = (By.XPATH, "//font[contains(text(), 'errato')]") # Para detectar login fallido
 SCHEDULE_LINK = (By.LINK_TEXT, 'Orario Settimanale')
 PERSONAL_DATA_TABLE = (By.ID, 'GridView1')
 SCHEDULE_DIV_CONTAINER = (By.ID, 'orario1sem')
-# XPath para esperar a que cualquier celda del horario tenga texto
-SCHEDULE_DATA_CELL = (By.XPATH, "//div[@id='orario1sem']//td[normalize-space(.)]")
 
 
 def configurar_driver() -> WebDriver:
-    """Configura e inicia el navegador Chrome con Selenium en modo headless."""
+    """Configura e inicia el navegador Chrome con Selenium en modo headless.
+    
+    Returns:
+        WebDriver: La instancia del driver de Chrome configurado.
+    """
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    return driver
+    # Suprime logs irrelevantes de Selenium en la consola
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        return driver
+    except Exception as e:
+        logging.error(f"No se pudo inicializar ChromeDriverManager. ¿Hay conexión a internet? Error: {e}")
+        raise
 
-# --- MEJORA: Las funciones ahora son más limpias, sin time.sleep() ---
 def iniciar_sesion(driver: WebDriver, wait: WebDriverWait, usuario: str, contrasena: str):
-    """Navega a la página de login, espera a los elementos e inicia sesión."""
-    print("Accediendo a la página de login...")
+    """Navega a la página de login, espera a los elementos e inicia sesión.
+    
+    Args:
+        driver: La instancia del driver de Selenium.
+        wait: La instancia de WebDriverWait.
+        usuario: El nombre de usuario para el login.
+        contrasena: La contraseña para el login.
+        
+    Raises:
+        TimeoutException: Si los campos de login no aparecen a tiempo.
+        ValueError: Si el login falla (credenciales incorrectas).
+    """
+    logging.info("Accediendo a la página de login...")
     driver.get(URL_LOGIN)
     
-    # Espera a que el campo de usuario sea visible antes de interactuar
     campo_usuario = wait.until(EC.visibility_of_element_located(LOGIN_USER_FIELD))
-    campo_contrasena = driver.find_element(*LOGIN_PASS_FIELD) # El asterisco desempaqueta la tupla
+    campo_contrasena = driver.find_element(*LOGIN_PASS_FIELD)
     boton_login = driver.find_element(*LOGIN_BUTTON)
 
-    print("Introduciendo credenciales...")
+    logging.info("Introduciendo credenciales...")
     campo_usuario.send_keys(usuario)
     campo_contrasena.send_keys(contrasena)
-    
-    print("Haciendo clic en el botón de login...")
     boton_login.click()
 
-def navegar_a_horarios(driver: WebDriver):
-    """Hace clic en el enlace para ir a la página de horarios."""
-    # Esta función ahora es más simple, solo hace clic. La espera se maneja fuera.
-    print("Navegando a la sección de horarios...")
-    driver.find_element(*SCHEDULE_LINK).click()
-
-def extraer_datos_personales(driver: WebDriver) -> Optional[Dict[str, str]]:
-    """Extrae los datos personales del estudiante de la tabla GridView1."""
-    print("Extrayendo datos personales del estudiante...")
+    # Verificación de login exitoso: si aparece un mensaje de error, las credenciales son incorrectas.
     try:
-        tabla_datos = driver.find_element(*PERSONAL_DATA_TABLE)
-        html_tabla = tabla_datos.get_attribute('outerHTML')
-        soup_tabla = BeautifulSoup(html_tabla, 'html.parser')
+        wait.until(EC.visibility_of_element_located(LOGIN_ERROR_MESSAGE))
+        raise ValueError("Login fallido. Usuario o contraseña incorrectos.")
+    except TimeoutException:
+        # Es el comportamiento esperado: no se encontró el mensaje de error, el login fue exitoso.
+        logging.info("Login exitoso.")
+
+def navegar_a_horarios(driver: WebDriver, wait: WebDriverWait):
+    """Hace clic en el enlace para ir a la página de horarios.
+    
+    Args:
+        driver: La instancia del driver de Selenium.
+        wait: La instancia de WebDriverWait.
+    """
+    logging.info("Navegando a la sección de horarios...")
+    link_horario = wait.until(EC.element_to_be_clickable(SCHEDULE_LINK))
+    link_horario.click()
+
+def extraer_datos_personales(driver: WebDriver, wait: WebDriverWait) -> Dict[str, str]:
+    """Extrae los datos personales del estudiante de la tabla.
+    
+    Args:
+        driver: La instancia del driver de Selenium.
+        wait: La instancia de WebDriverWait.
         
-        fila_datos = soup_tabla.find_all('tr')[1]
-        celdas = fila_datos.find_all('td')
+    Returns:
+        Un diccionario con la matrícula, nombre y apellido.
         
-        datos_personales = {
-            'matricola': celdas[0].get_text(strip=True),
-            'cognome': celdas[1].get_text(strip=True),
-            'nome': celdas[2].get_text(strip=True)
-        }
+    Raises:
+        NoSuchElementException: Si la tabla de datos personales no se encuentra.
+        IndexError: Si la estructura de la tabla no es la esperada.
+    """
+    logging.info("Extrayendo datos personales del estudiante...")
+    tabla_datos = wait.until(EC.visibility_of_element_located(PERSONAL_DATA_TABLE))
+    html_tabla = tabla_datos.get_attribute('outerHTML')
+    soup_tabla = BeautifulSoup(html_tabla, 'html.parser')
+    
+    filas = soup_tabla.find_all('tr')
+    if len(filas) < 2:
+        raise IndexError("La tabla de datos personales no tiene la estructura esperada (faltan filas).")
         
-        print(f"Datos encontrados: Matrícula {datos_personales['matricola']}, {datos_personales['cognome']} {datos_personales['nome']}")
-        return datos_personales
-    except Exception as e:
-        print(f"Error al extraer los datos personales: {e}")
-        return None
+    celdas = filas[1].find_all('td')
+    if len(celdas) < 3:
+        raise IndexError("La tabla de datos personales no tiene la estructura esperada (faltan columnas).")
+    
+    datos_personales = {
+        'matricola': celdas[0].get_text(strip=True),
+        'cognome': celdas[1].get_text(strip=True),
+        'nome': celdas[2].get_text(strip=True)
+    }
+    
+    logging.info(f"Datos encontrados: Matrícula {datos_personales['matricola']}, {datos_personales['cognome']} {datos_personales['nome']}")
+    return datos_personales
 
 def extraer_datos_horario(driver: WebDriver) -> List[Dict[str, str]]:
-    """Extrae la información de las tablas de horarios en formato calendario."""
-    print("Extrayendo datos del horario...")
+    """Extrae la información de las tablas de horarios.
+    
+    Args:
+        driver: La instancia del driver de Selenium.
+        
+    Returns:
+        Una lista de diccionarios, donde cada uno representa un bloque de clase.
+    """
+    logging.info("Extrayendo datos del horario...")
     html = driver.page_source
     soup = BeautifulSoup(html, 'html.parser')
     horario_final = []
     
     contenedor_principal = soup.find('div', id=SCHEDULE_DIV_CONTAINER[1])
     if not contenedor_principal:
-        print("Advertencia: No se encontró el contenedor principal del horario.")
+        logging.warning("No se encontró el contenedor principal del horario. Puede que no haya horario publicado.")
         return []
 
     titulos_semestre = contenedor_principal.find_all('h1')
@@ -110,7 +157,7 @@ def extraer_datos_horario(driver: WebDriver) -> List[Dict[str, str]]:
         tabla = titulo.find_next_sibling('table')
         if not tabla: continue
 
-        print(f"--- Procesando: {nombre_semestre} ---")
+        logging.info(f"--- Procesando: {nombre_semestre} ---")
         filas_cabecera = tabla.find('thead').find_all('tr')
         dias_semana = [th.get_text(strip=True) for th in filas_cabecera[0].find_all('th')[1:]]
         
@@ -132,78 +179,51 @@ def extraer_datos_horario(driver: WebDriver) -> List[Dict[str, str]]:
                     }
                     horario_final.append(clase)
 
-    print(f"Proceso completado. Se encontraron {len(horario_final)} bloques de clase en total.")
+    logging.info(f"Proceso completado. Se encontraron {len(horario_final)} bloques de clase en total.")
     return horario_final
 
-def actualizar_estudiante_y_horario_en_firestore(db: firestore.client, datos_personales: Dict[str, str], horario_data: List[Dict[str, str]]):
-    """Crea/actualiza los datos de un estudiante y su horario en Firestore."""
-    matricola = datos_personales['matricola']
-    print(f"Actualizando perfil del estudiante con matrícula '{matricola}' en Firestore...")
-
-    estudiante_ref = db.collection('estudiantes').document(matricola)
-    perfil_data = {'cognome': datos_personales['cognome'], 'nome': datos_personales['nome']}
-    estudiante_ref.set(perfil_data, merge=True)
-    print("Datos del perfil (nombre, apellido) guardados/actualizados.")
-
-    if horario_data:
-        print("Horario con datos detectado. Procediendo a guardarlo...")
-        horario_ref = estudiante_ref.collection('horario')
-        for doc in horario_ref.stream():
-            doc.reference.delete()
-        for clase in horario_data:
-            horario_ref.add(clase)
-        print(f"¡Horario guardado con éxito para la matrícula '{matricola}'!")
-    else:
-        print("El horario extraído está vacío. No se realizarán cambios en el horario de Firestore.")
-
-
 # --- FLUJO PRINCIPAL DE EJECUCIÓN ---
-if __name__ == '__main__':
-    print("Iniciando script de PUG...")
-    # 1. INICIALIZACIÓN DE SERVICIOS
-    cred = credentials.Certificate(FIREBASE_CREDS_PATH)
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    
-    driver = configurar_driver()
-    # MEJORA: Definimos un solo WebDriverWait para reutilizarlo
-    wait = WebDriverWait(driver, 20) # Aumentamos a 20 segundos para más robustez
+def main():
+    """Función principal que orquesta el proceso de scraping."""
+    parser = argparse.ArgumentParser(description="Extrae el horario de un estudiante de la PUG.")
+    parser.add_argument('--usuario', required=True, help='Usuario del portal de la universidad.')
+    parser.add_argument('--contrasena', required=True, help='Contraseña del portal.')
+    args = parser.parse_args()
+
+    driver = None
+    datos_finales = {}
 
     try:
-        # 2. LOGIN Y NAVEGACIÓN
-        iniciar_sesion(driver, wait, USUARIO, CONTRASENA)
+        driver = configurar_driver()
+        wait = WebDriverWait(driver, 15) # Reducido a 15s, suficiente para la mayoría de casos
         
-        # MEJORA: Esperamos explícitamente al enlace del horario después del login
-        print("Login exitoso, esperando a la página de bienvenida...")
-        wait.until(EC.visibility_of_element_located(SCHEDULE_LINK))
+        iniciar_sesion(driver, wait, args.usuario, args.contrasena)
+        navegar_a_horarios(driver, wait)
         
-        navegar_a_horarios(driver)
-        
-        # MEJORA: Esperamos explícitamente a la tabla de datos personales
-        print("Página de horarios cargada, esperando datos personales...")
-        wait.until(EC.visibility_of_element_located(PERSONAL_DATA_TABLE))
-        
-        # 3. EXTRACCIÓN DE DATOS
-        datos_personales = extraer_datos_personales(driver)
-        if not datos_personales:
-            raise Exception("No se pudieron obtener los datos personales, el script no puede continuar.")
-
-        try:
-            # Intentamos esperar por los datos del horario, pero no fallamos si no aparecen
-            wait.until(EC.presence_of_element_located(SCHEDULE_DATA_CELL))
-        except Exception:
-            print("No se encontraron datos en la tabla de horarios (esperado durante las vacaciones).")
-        
+        datos_personales = extraer_datos_personales(driver, wait)
         horario_extraido = extraer_datos_horario(driver)
         
-        # 4. GUARDAR EN FIREBASE
-        actualizar_estudiante_y_horario_en_firestore(db, datos_personales, horario_extraido)
+        datos_finales = {
+            "datos_personales": datos_personales,
+            "horario": horario_extraido
+        }
 
+    except (TimeoutException, NoSuchElementException) as e:
+        error_msg = f"No se pudo encontrar un elemento en la página. Puede que la web haya cambiado o esté en mantenimiento. Detalles: {e.__class__.__name__}"
+        logging.error(error_msg)
+        datos_finales["error"] = error_msg
+    except ValueError as e: # Captura el error de login incorrecto
+        logging.error(str(e))
+        datos_finales["error"] = str(e)
     except Exception as e:
-        print(f"\nOcurrió un error general en el script: {e}")
-        driver.save_screenshot('error_screenshot.png')
-        print("Se ha guardado una captura de pantalla del error como 'error_screenshot.png'.")
-
+        error_msg = f"Ha ocurrido un error inesperado: {e.__class__.__name__} - {e}"
+        logging.error(error_msg)
+        datos_finales["error"] = error_msg
     finally:
-        print("\nCerrando el navegador.")
-        driver.quit()
+        if driver:
+            driver.quit()
+        # Imprimimos el resultado final como un string JSON para que Flask lo capture.
+        print(json.dumps(datos_finales, indent=4))
+
+if __name__ == '__main__':
+    main()

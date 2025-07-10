@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Revisar Horario</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
+        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .card h2 { margin-top: 0; }
+        .horario-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
+        .empty { color: #888; font-style: italic; }
+        button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; width: 100%; background-color: #28a745; color: white; border: none; }
+    </style>
+</head>
+<body>
+    <h1>Revisa tus Datos Antes de Guardar</h1>
+    <p>Confirma que la información extraída es correcta. Si algo está mal, podrás editarlo en una futura versión.</p>
+
+    <form action="/guardar-horario" method="post">
+        <div class="card">
+            <h2>Datos Personales</h2>
+            <p><strong>Matrícula:</strong> {{ datos.datos_personales.matricola }}</p>
+            <p><strong>Nombre:</strong> {{ datos.datos_personales.nome }}</p>
+            <p><strong>Apellido:</strong> {{ datos.datos_personales.cognome }}</p>
+            
+            <!-- Campos ocultos para enviar estos datos al guardar -->
+            <input type="hidden" name="matricola" value="{{ datos.datos_personales.matricola }}">
+            <input type="hidden" name="nome" value="{{ datos.datos_personales.nome }}">
+            <input type="hidden" name="cognome" value="{{ datos.datos_personales.cognome }}">
+        </div>
+
+        <div class="card">
+            <h2>Horario Extraído</h2>
+            {% if datos.horario %}
+                {% for clase in datos.horario %}
+                    <div class="horario-item">
+                        <span><strong>{{ clase.dia }}</strong> - Bloque {{ clase.bloque_horario }}</span>
+                        <span>{{ clase.info_clase }}</span>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty">
+                    <strong>No se encontraron clases en tu horario.</strong><br>
+                    Esto es normal si la universidad aún no los ha publicado o si estás en periodo de vacaciones.
+                    Puedes guardar tus datos personales ahora, y volver a ejecutar el proceso más tarde para capturar tu horario.
+                </p>
+            {% endif %}
+        </div>
+
+        {% if datos.horario %}
+            <button type="submit">Confirmar y Guardar en la Base de Datos</button>
+        {% else %}
+            <button type="submit">Guardar mis Datos Personales</button>
+        {% endif %}
+    </form>
+</body>
+</html>

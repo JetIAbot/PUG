@@ -1,13 +1,62 @@
 # matchmaking.py (Versión Final con Algoritmo de Matchmaking)
 
+# --- IMPORTACIONES ---
+import firebase_admin
+from firebase_admin import credentials, firestore
+
 # --- DICCIONARIOS Y CONSTANTES DE CONFIGURACIÓN ---
+ORDEN_BLOQUES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+# Se asume que credenciales.json está en el mismo directorio
+FIREBASE_CREDS_PATH = "credenciales.json" 
+
+# Mapeo de bloques a horas (ajustar si es necesario)
 BLOQUES_A_HORAS = {
     'I': '08:30 - 09:15', 'II': '09:30 - 10:15', 'III': '10:30 - 11:15',
     'IV': '11:30 - 12:15', 'V': '15:00 - 15:45', 'VI': '16:00 - 16:45',
     'VII': '17:00 - 17:45', 'VIII': '18:00 - 18:45', 'IX': '19:00 - 19:45',
     'X': '20:00 - 20:45'
 }
-ORDEN_BLOQUES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+
+def inicializar_firebase():
+    """Inicializa la conexión con Firebase si aún no existe."""
+    if not firebase_admin._apps:
+        try:
+            cred = credentials.Certificate(FIREBASE_CREDS_PATH)
+            firebase_admin.initialize_app(cred)
+            return firestore.client()
+        except FileNotFoundError:
+            print(f"Error: El archivo de credenciales '{FIREBASE_CREDS_PATH}' no fue encontrado.")
+            return None
+        except Exception as e:
+            print(f"Error al inicializar Firebase: {e}")
+            return None
+    return firestore.client()
+
+def obtener_datos_de_firestore(db: firestore.client):
+    """
+    Obtiene los datos de todos los estudiantes y sus horarios desde Firestore.
+    """
+    print("Conectando a Firestore para obtener los datos de los estudiantes...")
+    datos_estudiantes = {}
+    estudiantes_ref = db.collection('estudiantes')
+    
+    for estudiante_doc in estudiantes_ref.stream():
+        matricola = estudiante_doc.id
+        datos_perfil = estudiante_doc.to_dict()
+        
+        datos_estudiantes[matricola] = {
+            "nome": datos_perfil.get('nome', ''),
+            "cognome": datos_perfil.get('cognome', ''),
+            "horario": []
+        }
+        
+        # Obtenemos el horario de la subcolección
+        horario_ref = estudiante_doc.reference.collection('horario')
+        for clase_doc in horario_ref.stream():
+            datos_estudiantes[matricola]['horario'].append(clase_doc.to_dict())
+            
+    print(f"Se encontraron datos de {len(datos_estudiantes)} estudiante(s).")
+    return datos_estudiantes
 
 def obtener_datos_de_prueba():
     # ... (Esta función no cambia, la dejamos como está)
@@ -96,15 +145,22 @@ def imprimir_grupos(grupos_encontrados):
             print(f"Para salir el {dia} a las {hora}:")
             print(f"  - Grupo compatible: {', '.join(personas)}\n")
 
-if __name__ == '__main__':
-    # 1. Obtener los datos (por ahora, de nuestra función de prueba)
-    datos_brutos = obtener_datos_de_prueba()
+def main():
+    """Función principal que orquesta el proceso de matchmaking."""
+    db = inicializar_firebase()
+    if not db:
+        print("El script no puede continuar sin una conexión a la base de datos.")
+        return
+
+    datos_brutos = obtener_datos_de_firestore(db)
     
-    # 2. Procesar los horarios a un formato simple
+    if not datos_brutos:
+        print("No se encontraron datos de estudiantes en Firestore. El script no puede continuar.")
+        return
+
     horarios_listos_para_comparar = aplanar_horarios(datos_brutos)
-    
-    # 3. Encontrar las coincidencias
     grupos_de_viaje = encontrar_coincidencias(horarios_listos_para_comparar)
-    
-    # 4. Imprimir los resultados de forma clara
     imprimir_grupos(grupos_de_viaje)
+
+if __name__ == '__main__':
+    main()
