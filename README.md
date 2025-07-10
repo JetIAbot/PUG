@@ -185,7 +185,7 @@ Este proyecto está licenciado bajo la Licencia MIT. Consulta el archivo `LICENS
 ## 📧 Contacto
 
 Para preguntas o más información, por favor contacta a:
-**Tu Nombre** - tu.email@dominio.com
+**Jose Giraldo** - jose.giraldo.vasquez@srmmedellin.com
 
 ---
 
