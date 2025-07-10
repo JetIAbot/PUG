@@ -94,16 +94,16 @@ Para que la aplicación funcione, necesitas tener **3 terminales abiertas simult
 *Deja esta terminal abierta.*
 
 **Terminal 2: Iniciar el Worker de Celery**
-Este es el trabajador que procesará las tareas de scraping.
+Este es el trabajador que procesará las tareas de scraping. **Importante:** Ejecuta este comando desde la raíz del proyecto.
 ```bash
-python -m celery -A tasks worker --loglevel=info --pool=solo
+python -m celery -A src.tasks worker --loglevel=info --pool=solo
 ```
 *El parámetro `--pool=solo` es importante para la compatibilidad con Windows. Deja esta terminal abierta para ver los logs de las tareas.*
 
 **Terminal 3: Iniciar el Servidor Web Flask**
-Este es el motor de tu aplicación web.
+Este es el motor de tu aplicación web. **Importante:** Ejecuta este comando desde la raíz del proyecto.
 ```bash
-python app.py
+python -m src.app
 ```
 *Deja esta terminal abierta.*
 
@@ -130,17 +130,19 @@ Una vez que los tres componentes estén en marcha:
 
 ```
 .
-├── app.py                # Archivo principal de la aplicación Flask
-├── requirements.txt       # Dependencias de Python necesarias
-├── tasks.py               # Definición de tareas de Celery
-├── templates/            # Plantillas HTML para la interfaz de usuario
-│   ├── admin.html        # Interfaz del administrador
-│   └── index.html        # Página principal para estudiantes
-├── static/               # Archivos estáticos como CSS y JS
-│   └── style.css         # Estilos para la aplicación
-├── venv/                 # Entorno virtual de Python (creado con `python -m venv venv`)
-├── credenciales.json     # Archivo de credenciales de servicio de Firebase
-└── .env                  # Variables de entorno (no subir a repositorios públicos)
+├── src/                # Directorio principal del código fuente
+│   ├── __init__.py     # Hace que src sea un paquete de Python
+│   ├── app.py          # Aplicación principal Flask (rutas y lógica web)
+│   ├── main.py         # Script de Web Scraping con Selenium
+│   ├── tasks.py        # Definición de las tareas de Celery
+│   └── matchmaking.py  # Algoritmo para encontrar grupos de viaje
+├── templates/          # Archivos HTML para la interfaz
+│   ├── index.html      # Página de login para estudiantes
+│   └── admin.html      # Panel de control del administrador
+├── .env                # (Tú lo creas) Variables de entorno (ej. FLASK_SECRET_KEY)
+├── credenciales.json   # (Tú lo añades) Credenciales de servicio de Firebase
+├── requirements.txt    # Lista de dependencias de Python
+└── README.md           # Este archivo
 ```
 
 ---

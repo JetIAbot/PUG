@@ -6,13 +6,15 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from dotenv import load_dotenv
-from tasks import run_scraping_task  # Importamos la tarea de scraping
+from tasks import run_scraping_task
+from matchmaking import run_matchmaking_logic
 
 # Cargar variables de entorno desde .env
 load_dotenv()
 
 # Inicializamos la aplicación Flask
-app = Flask(__name__)
+# Se especifica la ruta a la carpeta de plantillas, que está un nivel arriba de 'src'
+app = Flask(__name__, template_folder='../templates')
 # MEJORA DE SEGURIDAD: La clave secreta se carga desde variables de entorno
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'una-clave-secreta-por-defecto-solo-para-desarrollo')
 
@@ -54,18 +56,14 @@ def admin():
 
 @app.route('/ejecutar-matchmaking', methods=['POST'])
 def ejecutar_matchmaking():
-    """Ejecuta el script matchmaking.py y devuelve el resultado."""
+    """Ejecuta la lógica de matchmaking y devuelve el resultado."""
     try:
-        resultado = subprocess.run(
-            [sys.executable, 'matchmaking.py'],
-            capture_output=True, text=True, check=True, encoding='utf-8'
-        )
-        return jsonify(titulo="Resultado del Matchmaking", salida=resultado.stdout)
-    except subprocess.CalledProcessError as e:
-        error_msg = f"El script de matchmaking falló:\n{e.stderr or e.stdout}"
-        return jsonify(titulo="Error en el Matchmaking", salida=error_msg), 500
+        # Llamada directa a la función de matchmaking
+        resultado_stdout = run_matchmaking_logic()
+        return jsonify(titulo="Resultado del Matchmaking", salida=resultado_stdout)
     except Exception as e:
-        return jsonify(titulo="Error inesperado", salida=str(e)), 500
+        # Captura cualquier excepción que la lógica de matchmaking pueda lanzar
+        return jsonify(titulo="Error inesperado en Matchmaking", salida=str(e)), 500
 
 
 if __name__ == '__main__':

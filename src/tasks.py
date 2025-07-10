@@ -7,6 +7,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from celery import Celery
 import logging
+import os
 
 # --- CONFIGURACIÓN DE LOGGING ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,8 +43,10 @@ def run_scraping_task(usuario, contrasena):
 
     try:
         # 1. Ejecutar el script main.py como un subproceso
+        # La ruta ahora es relativa a la raíz del proyecto, donde se ejecuta el worker
+        main_script_path = os.path.join('src', 'main.py')
         resultado_proceso = subprocess.run(
-            [sys.executable, 'main.py', '--usuario', usuario, '--contrasena', contrasena],
+            [sys.executable, main_script_path, '--usuario', usuario, '--contrasena', contrasena],
             capture_output=True, text=True, check=True, encoding='utf-8', errors='replace'
         )
         

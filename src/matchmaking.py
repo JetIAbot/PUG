@@ -25,7 +25,8 @@ def inicializar_firebase():
             firebase_admin.initialize_app(cred)
             return firestore.client()
         except FileNotFoundError:
-            print(f"Error: El archivo de credenciales '{FIREBASE_CREDS_PATH}' no fue encontrado.")
+            # La ruta ahora debe considerar que el script se ejecuta desde la raíz del proyecto
+            print(f"Error: El archivo de credenciales '{FIREBASE_CREDS_PATH}' no fue encontrado. Asegúrate de que esté en la raíz del proyecto.")
             return None
         except Exception as e:
             print(f"Error al inicializar Firebase: {e}")
@@ -98,69 +99,79 @@ def encontrar_coincidencias(horarios_aplanados):
     # 1. Llenar los índices de ida y vuelta
     for matricola, data in horarios_aplanados.items():
         nombre = data['nome_completo']
-        for dia, horas in data['horario_simple'].items():
-            # Índice de IDA
-            llave_ida = f"{dia}_{horas['entrada']}"
-            if llave_ida not in indice_ida:
-                indice_ida[llave_ida] = []
-            indice_ida[llave_ida].append(nombre)
+        horario = data['horario_simple']
+        
+        for dia, horas in horario.items():
+            # Clave para ida: (dia, bloque_entrada)
+            clave_ida = (dia, horas['entrada'])
+            if clave_ida not in indice_ida:
+                indice_ida[clave_ida] = []
+            indice_ida[clave_ida].append(f"{nombre} ({matricola})")
 
-            # Índice de VUELTA
-            llave_vuelta = f"{dia}_{horas['salida']}"
-            if llave_vuelta not in indice_vuelta:
-                indice_vuelta[llave_vuelta] = []
-            indice_vuelta[llave_vuelta].append(nombre)
+            # Clave para vuelta: (dia, bloque_salida)
+            clave_vuelta = (dia, horas['salida'])
+            if clave_vuelta not in indice_vuelta:
+                indice_vuelta[clave_vuelta] = []
+            indice_vuelta[clave_vuelta].append(f"{nombre} ({matricola})")
 
-    # 2. Filtrar para encontrar los grupos reales (más de 1 persona)
-    grupos_ida = {k: v for k, v in indice_ida.items() if len(v) > 1}
-    grupos_vuelta = {k: v for k, v in indice_vuelta.items() if len(v) > 1}
+    # 2. Construir los grupos a partir de los índices
+    grupos_ida = {f"{dia} a las {BLOQUES_A_HORAS[bloque]}": personas for (dia, bloque), personas in indice_ida.items() if len(personas) > 1}
+    grupos_vuelta = {f"{dia} a las {BLOQUES_A_HORAS[bloque]}": personas for (dia, bloque), personas in indice_vuelta.items() if len(personas) > 1}
+    
+    print("Coincidencias encontradas.")
+    return grupos_ida, grupos_vuelta
 
-    return {"ida": grupos_ida, "vuelta": grupos_vuelta}
-
-def imprimir_grupos(grupos_encontrados):
-    """Formatea e imprime los grupos de viaje encontrados."""
-    print("\n" + "="*40)
-    print("      GRUPOS DE VIAJE COMPATIBLES")
-    print("="*40)
-
-    # Imprimir viajes de IDA
-    print("\n--- VIAJES DE IDA (Llegar a la universidad) ---\n")
-    if not grupos_encontrados['ida']:
-        print("No se encontraron coincidencias para viajes de ida.")
+def formatear_resultados(grupos_ida, grupos_vuelta):
+    """
+    Formatea los grupos encontrados en un string legible para el administrador.
+    """
+    print("Formateando resultados...")
+    output = "--- GRUPOS DE IDA (HACIA LA UNIVERSIDAD) ---\n"
+    if not grupos_ida:
+        output += "No se encontraron grupos para el viaje de ida.\n"
     else:
-        for llave, personas in grupos_encontrados['ida'].items():
-            dia, bloque = llave.split('_')
-            hora = BLOQUES_A_HORAS.get(bloque, bloque)
-            print(f"Para llegar el {dia} a las {hora}:")
-            print(f"  - Grupo compatible: {', '.join(personas)}\n")
+        for horario, personas in sorted(grupos_ida.items()):
+            output += f"\n[+] Horario: {horario}\n"
+            output += "    Miembros: " + ", ".join(personas) + "\n"
 
-    # Imprimir viajes de VUELTA
-    print("\n--- VIAJES DE VUELTA (Salir de la universidad) ---\n")
-    if not grupos_encontrados['vuelta']:
-        print("No se encontraron coincidencias para viajes de vuelta.")
+    output += "\n--- GRUPOS DE VUELTA (DESDE LA UNIVERSIDAD) ---\n"
+    if not grupos_vuelta:
+        output += "No se encontraron grupos para el viaje de vuelta.\n"
     else:
-        for llave, personas in grupos_encontrados['vuelta'].items():
-            dia, bloque = llave.split('_')
-            hora = BLOQUES_A_HORAS.get(bloque, bloque)
-            print(f"Para salir el {dia} a las {hora}:")
-            print(f"  - Grupo compatible: {', '.join(personas)}\n")
+        for horario, personas in sorted(grupos_vuelta.items()):
+            output += f"\n[+] Horario: {horario}\n"
+            output += "    Miembros: " + ", ".join(personas) + "\n"
+            
+    return output
 
-def main():
-    """Función principal que orquesta el proceso de matchmaking."""
+def run_matchmaking_logic():
+    """
+    Función principal que orquesta todo el proceso de matchmaking.
+    Esta función será llamada desde app.py.
+    """
     db = inicializar_firebase()
     if not db:
-        print("El script no puede continuar sin una conexión a la base de datos.")
-        return
+        return "Error: No se pudo inicializar la conexión con Firebase."
 
-    datos_brutos = obtener_datos_de_firestore(db)
+    # Descomentar para usar datos reales de Firestore
+    datos_estudiantes = obtener_datos_de_firestore(db)
     
-    if not datos_brutos:
-        print("No se encontraron datos de estudiantes en Firestore. El script no puede continuar.")
-        return
+    # Comentar o eliminar si se usan datos de Firestore
+    # datos_estudiantes = obtener_datos_de_prueba()
 
-    horarios_listos_para_comparar = aplanar_horarios(datos_brutos)
-    grupos_de_viaje = encontrar_coincidencias(horarios_listos_para_comparar)
-    imprimir_grupos(grupos_de_viaje)
+    if not datos_estudiantes:
+        return "No se encontraron datos de estudiantes para procesar."
+
+    horarios_aplanados = aplanar_horarios(datos_estudiantes)
+    grupos_ida, grupos_vuelta = encontrar_coincidencias(horarios_aplanados)
+    resultado_final = formatear_resultados(grupos_ida, grupos_vuelta)
+    
+    print(resultado_final) # Imprime en la consola del servidor para depuración
+    return resultado_final # Devuelve el string para la interfaz web
 
 if __name__ == '__main__':
-    main()
+    """
+    Este bloque permite que el script siga siendo ejecutable de forma independiente
+    para pruebas o depuración.
+    """
+    run_matchmaking_logic()
