@@ -1,0 +1,17 @@
+# Frameworks y Servidor Web
+flask
+python-dotenv
+celery
+redis
+
+# Firebase y Google Cloud
+firebase-admin
+
+# Web Scraping
+selenium
+webdriver-manager
+beautifulsoup4
+
+# Utilidades (aunque no se usen directamente en el código final, son comunes en desarrollo)
+requests
+gunicorn

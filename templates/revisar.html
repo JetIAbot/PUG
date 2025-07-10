@@ -4,17 +4,22 @@
     <meta charset="UTF-8">
     <title>Revisar Horario</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
-        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        .card h2 { margin-top: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f8f9fa; color: #343a40; }
+        .card { border: 1px solid #dee2e6; padding: 20px; border-radius: 8px; margin-bottom: 20px; background-color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .card h2 { margin-top: 0; color: #007bff; }
         .horario-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
-        .empty { color: #888; font-style: italic; }
-        button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; width: 100%; background-color: #28a745; color: white; border: none; }
+        .empty { color: #6c757d; font-style: italic; }
+        .button-container { display: flex; gap: 10px; margin-top: 20px; }
+        .button-link { font-size: 1.1em; padding: 12px 24px; cursor: pointer; width: 100%; border-radius: 5px; text-align: center; text-decoration: none; display: inline-block; }
+        .btn-primary { background-color: #28a745; color: white; border: none; }
+        .btn-primary:hover { background-color: #218838; }
+        .btn-secondary { background-color: #6c757d; color: white; border: 1px solid #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
     </style>
 </head>
 <body>
     <h1>Revisa tus Datos Antes de Guardar</h1>
-    <p>Confirma que la información extraída es correcta. Si algo está mal, podrás editarlo en una futura versión.</p>
+    <p>Confirma que la información extraída es correcta. Si algo está mal, podrás editarlo en el futuro.</p>
 
     <form action="/guardar-horario" method="post">
         <div class="card">
@@ -23,7 +28,6 @@
             <p><strong>Nombre:</strong> {{ datos.datos_personales.nome }}</p>
             <p><strong>Apellido:</strong> {{ datos.datos_personales.cognome }}</p>
             
-            <!-- Campos ocultos para enviar estos datos al guardar -->
             <input type="hidden" name="matricola" value="{{ datos.datos_personales.matricola }}">
             <input type="hidden" name="nome" value="{{ datos.datos_personales.nome }}">
             <input type="hidden" name="cognome" value="{{ datos.datos_personales.cognome }}">
@@ -41,17 +45,21 @@
             {% else %}
                 <p class="empty">
                     <strong>No se encontraron clases en tu horario.</strong><br>
-                    Esto es normal si la universidad aún no los ha publicado o si estás en periodo de vacaciones.
-                    Puedes guardar tus datos personales ahora, y volver a ejecutar el proceso más tarde para capturar tu horario.
+                    Esto es normal si la universidad aún no los ha publicado. Puedes guardar tus datos personales ahora y volver a intentarlo más tarde.
                 </p>
             {% endif %}
         </div>
 
-        {% if datos.horario %}
-            <button type="submit">Confirmar y Guardar en la Base de Datos</button>
-        {% else %}
-            <button type="submit">Guardar mis Datos Personales</button>
-        {% endif %}
+        <div class="button-container">
+            <button type="submit" class="button-link btn-primary">
+                {% if datos.horario %}
+                    Confirmar y Guardar
+                {% else %}
+                    Guardar mis Datos
+                {% endif %}
+            </button>
+            <a href="{{ url_for('index') }}" class="button-link btn-secondary">Cancelar</a>
+        </div>
     </form>
 </body>
 </html>
