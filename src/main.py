@@ -5,11 +5,13 @@ import argparse
 import json
 import logging
 from typing import Dict, List, Optional
+import time
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
@@ -33,154 +35,91 @@ PERSONAL_DATA_TABLE = (By.ID, 'GridView1')
 SCHEDULE_DIV_CONTAINER = (By.ID, 'orario1sem')
 
 
-def configurar_driver() -> WebDriver:
-    """Configura e inicia el navegador Chrome con Selenium en modo headless.
-    
-    Returns:
-        WebDriver: La instancia del driver de Chrome configurado.
+def realizar_scraping(usuario, contrasena):
     """
+    Realiza el web scraping en el portal de la universidad.
+    Devuelve un diccionario con los datos o lanza una excepción si falla.
+    """
+    URL_PORTAL = "https://segreteria.unigre.it/asp/authenticate.asp" # Asegúrate de que esta es la URL que ya verificaste
+
     options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    # Suprime logs irrelevantes de Selenium en la consola
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])
+    
+    # --- CAMBIO DE DEPURACIÓN: COMENTA LA LÍNEA HEADLESS ---
+    # options.add_argument("--headless") 
+    # ----------------------------------------------------
+
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    driver = webdriver.Chrome(options=options)
+    
     try:
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        return driver
+        # --- PRUEBA DE CONTROL ---
+        print("PASO DE DEPURACIÓN: Intentando acceder a https://www.google.com")
+        driver.get("https://www.google.com")
+        time.sleep(2) # Espera 2 segundos para que veas la página
+        print("PASO DE DEPURACIÓN: Acceso a Google exitoso.")
+        # -------------------------
+
+        print(f"PASO DE DEPURACIÓN: Intentando acceder a {URL_PORTAL}")
+        driver.get(URL_PORTAL)
+        print("PASO DE DEPURACIÓN: Acceso al portal exitoso.")
+
+        # Lógica de login
+        driver.find_element(By.ID, "mat").send_keys(usuario)
+        driver.find_element(By.ID, "pin").send_keys(contrasena)
+        driver.find_element(By.ID, "login").click()
+        
+        WebDriverWait(driver, 10).until(EC.url_contains("home.aspx"))
+
+        # Verificar si el login fue exitoso
+        if "login.aspx" in driver.current_url:
+            raise ValueError("Credenciales de usuario incorrectas o login fallido.")
+
+        # Extraer datos personales
+        driver.get("https://www.issrapug.it/ssp/dati_anagrafici.aspx")
+        time.sleep(2)
+        
+        nome = driver.find_element(By.ID, "nome").get_attribute('value')
+        cognome = driver.find_element(By.ID, "cognome").get_attribute('value')
+        
+        datos_personales = {
+            "matricola": usuario,
+            "nome": nome,
+            "cognome": cognome
+        }
+
+        # Extraer horario
+        driver.get("https://www.issrapug.it/ssp/orario.aspx")
+        time.sleep(2)
+        
+        horario = []
+        try:
+            tabla_horario = driver.find_element(By.ID, "orario")
+            filas = tabla_horario.find_elements(By.TAG_NAME, "tr")[1:]
+            for fila in filas:
+                celdas = fila.find_elements(By.TAG_NAME, "td")
+                if len(celdas) == 3:
+                    horario.append({
+                        "dia": celdas[0].text,
+                        "bloque_horario": celdas[1].text,
+                        "info_clase": celdas[2].text
+                    })
+        except:
+            # Es normal no encontrar la tabla si no hay horario publicado
+            pass
+
+        return {
+            "datos_personales": datos_personales,
+            "horario": horario,
+            "error": None
+        }
     except Exception as e:
-        logging.error(f"No se pudo inicializar ChromeDriverManager. ¿Hay conexión a internet? Error: {e}")
-        raise
-
-def iniciar_sesion(driver: WebDriver, wait: WebDriverWait, usuario: str, contrasena: str):
-    """Navega a la página de login, espera a los elementos e inicia sesión.
-    
-    Args:
-        driver: La instancia del driver de Selenium.
-        wait: La instancia de WebDriverWait.
-        usuario: El nombre de usuario para el login.
-        contrasena: La contraseña para el login.
-        
-    Raises:
-        TimeoutException: Si los campos de login no aparecen a tiempo.
-        ValueError: Si el login falla (credenciales incorrectas).
-    """
-    logging.info("Accediendo a la página de login...")
-    driver.get(URL_LOGIN)
-    
-    campo_usuario = wait.until(EC.visibility_of_element_located(LOGIN_USER_FIELD))
-    campo_contrasena = driver.find_element(*LOGIN_PASS_FIELD)
-    boton_login = driver.find_element(*LOGIN_BUTTON)
-
-    logging.info("Introduciendo credenciales...")
-    campo_usuario.send_keys(usuario)
-    campo_contrasena.send_keys(contrasena)
-    boton_login.click()
-
-    # Verificación de login exitoso: si aparece un mensaje de error, las credenciales son incorrectas.
-    try:
-        wait.until(EC.visibility_of_element_located(LOGIN_ERROR_MESSAGE))
-        raise ValueError("Login fallido. Usuario o contraseña incorrectos.")
-    except TimeoutException:
-        # Es el comportamiento esperado: no se encontró el mensaje de error, el login fue exitoso.
-        logging.info("Login exitoso.")
-
-def navegar_a_horarios(driver: WebDriver, wait: WebDriverWait):
-    """Hace clic en el enlace para ir a la página de horarios.
-    
-    Args:
-        driver: La instancia del driver de Selenium.
-        wait: La instancia de WebDriverWait.
-    """
-    logging.info("Navegando a la sección de horarios...")
-    link_horario = wait.until(EC.element_to_be_clickable(SCHEDULE_LINK))
-    link_horario.click()
-
-def extraer_datos_personales(driver: WebDriver, wait: WebDriverWait) -> Dict[str, str]:
-    """Extrae los datos personales del estudiante de la tabla.
-    
-    Args:
-        driver: La instancia del driver de Selenium.
-        wait: La instancia de WebDriverWait.
-        
-    Returns:
-        Un diccionario con la matrícula, nombre y apellido.
-        
-    Raises:
-        NoSuchElementException: Si la tabla de datos personales no se encuentra.
-        IndexError: Si la estructura de la tabla no es la esperada.
-    """
-    logging.info("Extrayendo datos personales del estudiante...")
-    tabla_datos = wait.until(EC.visibility_of_element_located(PERSONAL_DATA_TABLE))
-    html_tabla = tabla_datos.get_attribute('outerHTML')
-    soup_tabla = BeautifulSoup(html_tabla, 'html.parser')
-    
-    filas = soup_tabla.find_all('tr')
-    if len(filas) < 2:
-        raise IndexError("La tabla de datos personales no tiene la estructura esperada (faltan filas).")
-        
-    celdas = filas[1].find_all('td')
-    if len(celdas) < 3:
-        raise IndexError("La tabla de datos personales no tiene la estructura esperada (faltan columnas).")
-    
-    datos_personales = {
-        'matricola': celdas[0].get_text(strip=True),
-        'cognome': celdas[1].get_text(strip=True),
-        'nome': celdas[2].get_text(strip=True)
-    }
-    
-    logging.info(f"Datos encontrados: Matrícula {datos_personales['matricola']}, {datos_personales['cognome']} {datos_personales['nome']}")
-    return datos_personales
-
-def extraer_datos_horario(driver: WebDriver) -> List[Dict[str, str]]:
-    """Extrae la información de las tablas de horarios.
-    
-    Args:
-        driver: La instancia del driver de Selenium.
-        
-    Returns:
-        Una lista de diccionarios, donde cada uno representa un bloque de clase.
-    """
-    logging.info("Extrayendo datos del horario...")
-    html = driver.page_source
-    soup = BeautifulSoup(html, 'html.parser')
-    horario_final = []
-    
-    contenedor_principal = soup.find('div', id=SCHEDULE_DIV_CONTAINER[1])
-    if not contenedor_principal:
-        logging.warning("No se encontró el contenedor principal del horario. Puede que no haya horario publicado.")
-        return []
-
-    titulos_semestre = contenedor_principal.find_all('h1')
-    for titulo in titulos_semestre:
-        nombre_semestre = titulo.get_text(strip=True)
-        tabla = titulo.find_next_sibling('table')
-        if not tabla: continue
-
-        logging.info(f"--- Procesando: {nombre_semestre} ---")
-        filas_cabecera = tabla.find('thead').find_all('tr')
-        dias_semana = [th.get_text(strip=True) for th in filas_cabecera[0].find_all('th')[1:]]
-        
-        filas_horario = tabla.find_all('tr')[1:]
-        for fila in filas_horario:
-            celdas = fila.find_all(['th', 'td'])
-            if not celdas: continue
-            
-            bloque_horario = celdas[0].get_text(strip=True)
-            celdas_clases = celdas[1:]
-
-            for i, celda_clase in enumerate(celdas_clases):
-                if celda_clase.get_text(strip=True):
-                    clase = {
-                        'semestre': nombre_semestre,
-                        'dia': dias_semana[i],
-                        'bloque_horario': bloque_horario,
-                        'info_clase': celda_clase.get_text(separator='\n', strip=True)
-                    }
-                    horario_final.append(clase)
-
-    logging.info(f"Proceso completado. Se encontraron {len(horario_final)} bloques de clase en total.")
-    return horario_final
+        print(f"ERROR DETALLADO EN SCRAPING: {e}")
+        raise e
+    finally:
+        print("PASO DE DEPURACIÓN: Cerrando el driver de Selenium.")
+        time.sleep(5) # Pausa de 5 segundos para que puedas ver la ventana final antes de que se cierre
+        driver.quit()
 
 # --- FLUJO PRINCIPAL DE EJECUCIÓN ---
 def main():

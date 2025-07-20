@@ -195,3 +195,7 @@ cython_debug/
 
 #Ignorar Credenciales de Firebase
 credenciales.json
+
+#Ignorar Credenciales Hash Pass
+#  Hash Pass is a password management tool. `.hash_pass` contains sensitive information such as
+hash_pass.p

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Portal de Horarios PUG</title>
+    <title>Acceso de Estudiantes</title>
     <style>
         body { font-family: sans-serif; max-width: 800px; margin: auto; padding: 20px; }
         .container { text-align: center; border: 1px solid #ccc; padding: 30px; border-radius: 8px; }
@@ -10,17 +10,49 @@
         label { display: block; margin-bottom: 5px; }
         input { width: 100%; padding: 8px; box-sizing: border-box; }
         button { font-size: 1.2em; padding: 10px 20px; cursor: pointer; width: 100%; }
+
+        /* Estilos para los mensajes flash */
+        .flash-messages { list-style: none; padding: 0; margin-bottom: 20px; }
+        .flash-messages li { padding: 15px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
+        .flash-messages .error { background-color: #f8d7da; color: #721c24; }
+        .flash-messages .success { background-color: #d4edda; color: #155724; }
+        .flash-messages .info { background-color: #cce5ff; color: #004085; }
+
+        /* Estilos para el spinner de carga */
+        .spinner {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            vertical-align: -0.125em;
+            border: .2em solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: .75s linear infinite spinner-border;
+            margin-right: 0.5em;
+        }
+        @keyframes spinner-border {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Bienvenido al Portal de Horarios</h1>
-        <p>
-            Introduce tus credenciales del portal de la universidad para
-            actualizar tu horario en nuestra base de datos.
-        </p>
+        <h1>Actualiza tu Horario</h1>
+        
+        <!-- ========= BLOQUE DE MENSAJES AÑADIDO ========= -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <ul class="flash-messages">
+                {% for category, message in messages %}
+                    <li class="{{ category }}">{{ message }}</li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% endwith %}
+        <!-- ============================================= -->
+
         <!-- La acción del formulario debe coincidir con la ruta en app.py -->
-        <form action="/extraer-datos" method="post">
+        <form id="scraping-form" action="{{ url_for('extraer_datos') }}" method="post">
             <div>
                 <label for="usuario">Usuario (Matrícula):</label>
                 <input type="text" id="usuario" name="usuario" required>
@@ -29,8 +61,20 @@
                 <label for="contrasena">Contraseña:</label>
                 <input type="password" id="contrasena" name="contrasena" required>
             </div>
-            <button type="submit">Actualizar mi Horario</button>
+            <button type="submit" id="submit-button">Actualizar mi Horario</button>
         </form>
     </div>
+
+    <!-- ========= SCRIPT DE FEEDBACK DE CARGA AÑADIDO ========= -->
+    <script>
+        document.getElementById('scraping-form').addEventListener('submit', function() {
+            const button = document.getElementById('submit-button');
+            button.disabled = true;
+            button.innerHTML = `
+                <span class="spinner"></span>
+                Procesando...
+            `;
+        });
+    </script>
 </body>
 </html>
