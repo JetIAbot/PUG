@@ -1,17 +1,18 @@
-# Frameworks y Servidor Web
-flask
-python-dotenv
-celery
-redis
+# Dependencias principales de la aplicación web
+Flask==2.3.2
+celery==5.3.6
+redis==5.0.1
 
-# Firebase y Google Cloud
-firebase-admin
+# Dependencias para la base de datos y el entorno
+firebase-admin==6.2.0
+python-dotenv==1.0.0
 
-# Web Scraping
-selenium
-webdriver-manager
-beautifulsoup4
+# Dependencias para el web scraping
+selenium==4.11.2
+webdriver-manager==4.0.0
 
-# Utilidades (aunque no se usen directamente en el código final, son comunes en desarrollo)
-requests
-gunicorn
+# Dependencia para la seguridad (hashing de contraseñas)
+Werkzeug==2.3.6
+
+# Para instalar todas las dependencias, ejecuta:
+# pip install -r requirements.txt

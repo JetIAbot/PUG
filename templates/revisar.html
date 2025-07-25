@@ -2,209 +2,95 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Revisar y Guardar Horario</title>
+    <title>Revisar y Completar Datos</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f8f9fa; color: #343a40; }
-        .card { border: 1px solid #dee2e6; padding: 20px; border-radius: 8px; margin-bottom: 20px; background-color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f8f9fa; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; background-color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .card h2 { margin-top: 0; color: #007bff; }
         .horario-item { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee; }
-        .empty { color: #6c757d; font-style: italic; padding: 15px; background-color: #e9ecef; border-radius: 5px; }
-        .button-container { display: flex; gap: 10px; margin-top: 20px; }
-        .button-link { font-size: 1.1em; padding: 12px 24px; cursor: pointer; width: 100%; border-radius: 5px; text-align: center; text-decoration: none; display: inline-block; border: none; }
-        .btn-primary { background-color: #28a745; color: white; }
-        .btn-primary:hover { background-color: #218838; }
-        .btn-secondary { background-color: #6c757d; color: white; }
-        .btn-secondary:hover { background-color: #5a6268; }
-        .license-section { border: 1px solid #007bff; padding: 20px; border-radius: 8px; margin-top: 20px; background-color: #f0f8ff; }
-        .license-question { margin-bottom: 15px; }
-        .license-question label { font-weight: bold; display: block; margin-bottom: 5px; }
-        .license-options input[type="radio"] { margin-right: 10px; }
-        .hidden-fields { display: none; }
-        select, input[type="date"] { width: 100%; padding: 8px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
-        .validation-message { color: #dc3545; font-size: 0.9em; margin-top: 5px; }
-        /* Nuevos estilos para los checkboxes */
-        .license-category { border: 1px solid #cce5ff; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
-        .license-category legend { font-weight: bold; padding: 0 5px; width: auto; }
-        .checkbox-item { display: block; margin-bottom: 5px; }
-        .checkbox-item input { margin-right: 8px; }
+        .horario-item:last-child { border-bottom: none; }
+        .empty { color: #888; font-style: italic; }
+        button { font-size: 1.2em; padding: 12px 25px; cursor: pointer; width: 100%; background-color: #28a745; color: white; border: none; border-radius: 5px; }
+        button:hover { background-color: #218838; }
+        .form-group { margin-bottom: 15px; }
+        label { font-weight: bold; }
+        .license-details { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
-    <h1>Revisa tus Datos</h1>
-    <p>Confirma que la información extraída es correcta y completa los siguientes campos.</p>
+    <h1>Revisa y Completa tus Datos</h1>
+    <p>Confirma que la información extraída es correcta y completa los datos adicionales antes de guardar.</p>
 
-    <form id="review-form" action="{{ url_for('guardar_horario') }}" method="post">
+    <form action="{{ url_for('guardar_horario') }}" method="post">
         <div class="card">
             <h2>Datos Personales</h2>
             <p><strong>Matrícula:</strong> {{ datos.datos_personales.matricola }}</p>
             <p><strong>Nombre:</strong> {{ datos.datos_personales.nome }}</p>
             <p><strong>Apellido:</strong> {{ datos.datos_personales.cognome }}</p>
+            <!-- CORRECCIÓN 5: Mostramos la fecha de nacimiento extraída -->
+            <p><strong>Fecha de Nacimiento:</strong> {{ datos.datos_personales.data_nascita }}</p>
             
-            <!-- Campos ocultos para enviar estos datos al guardar -->
             <input type="hidden" name="matricola" value="{{ datos.datos_personales.matricola }}">
             <input type="hidden" name="nome" value="{{ datos.datos_personales.nome }}">
             <input type="hidden" name="cognome" value="{{ datos.datos_personales.cognome }}">
+            <!-- CORRECCIÓN 6: Añadimos un campo oculto para enviar la fecha de nacimiento -->
+            <input type="hidden" name="data_nascita" value="{{ datos.datos_personales.data_nascita }}">
         </div>
 
         <div class="card">
             <h2>Horario Extraído</h2>
             {% if datos.horario %}
-                <!-- Campo oculto para pasar el horario completo a la ruta de guardado -->
-                <input type="hidden" name="horario_json" value="{{ datos.horario | tojson }}">
-                
                 {% for clase in datos.horario %}
                     <div class="horario-item">
-                        <span><strong>{{ clase.dia }}</strong> - Bloque {{ clase.bloque_horario }}</span>
+                        <!-- CORRECCIÓN 1: Se usa 'clase.hora' en lugar de 'clase.bloque_horario' -->
+                        <span><strong>{{ clase.dia }}</strong> - Bloque {{ clase.hora }}</span>
                         <span>{{ clase.info_clase }}</span>
                     </div>
                 {% endfor %}
             {% else %}
-                <input type="hidden" name="horario_json" value="[]">
-                <p class="empty">
-                    <strong>No se encontraron clases en tu horario.</strong><br>
-                    Esto es normal si la universidad aún no los ha publicado. Puedes guardar tus datos personales ahora y volver a intentarlo más tarde.
-                </p>
+                <p class="empty">No se encontraron clases en el horario.</p>
             {% endif %}
+            <!-- CORRECCIÓN 2: Se añade un campo oculto para enviar el horario como JSON -->
+            <input type="hidden" name="horario_json" value="{{ datos.horario | tojson }}">
         </div>
 
-        <!-- ========= NUEVA SECCIÓN DE LICENCIA DE CONDUCIR ========= -->
-        <div class="license-section">
+        <!-- CORRECCIÓN 3: Se añade la sección para la información de conducción -->
+        <div class="card">
             <h2>Información de Conducción</h2>
-            
-            <div class="license-question">
-                <label>¿Tienes la licencia de conducción italiana?</label>
-                <div class="license-options">
-                    <input type="radio" id="license_yes" name="tiene_licencia" value="si" required>
-                    <label for="license_yes">Sí</label>
-                    <input type="radio" id="license_no" name="tiene_licencia" value="no">
-                    <label for="license_no">No</label>
-                </div>
+            <div class="form-group">
+                <label>¿Tienes licencia de conducir?</label><br>
+                <input type="radio" id="licencia_si" name="tiene_licencia" value="si" required> <label for="licencia_si">Sí</label>
+                <input type="radio" id="licencia_no" name="tiene_licencia" value="no" checked> <label for="licencia_no">No</label>
             </div>
 
-            <div id="additional-questions" class="hidden-fields">
-                <div class="license-question">
-                    <label>¿Qué tipo(s) de licencia tienes? (Selecciona una por categoría)</label>
-                    
-                    <fieldset class="license-category">
-                        <legend>🛵 Motocicletas y ciclomotores</legend>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="AM"> AM</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="A1"> A1</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="A2"> A2</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="A"> A</div>
-                    </fieldset>
-
-                    <fieldset class="license-category">
-                        <legend>🚙 Vehículos ligeros</legend>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="B"> B</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="B+E"> B+E</div>
-                    </fieldset>
-
-                    <fieldset class="license-category">
-                        <legend>🚛 Vehículos pesados</legend>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="C1"> C1</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="C1+E"> C1+E</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="C"> C</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="C+E"> C+E</div>
-                    </fieldset>
-
-                    <fieldset class="license-category">
-                        <legend>🚌 Transporte de pasajeros</legend>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="D1"> D1</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="D1+E"> D1+E</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="D"> D</div>
-                        <div class="checkbox-item"><input type="checkbox" name="tipo_licencia" value="D+E"> D+E</div>
-                    </fieldset>
+            <div id="license-details" class="license-details">
+                <div class="form-group">
+                    <label>Tipo de Licencia (selecciona todas las que apliquen):</label><br>
+                    <input type="checkbox" id="tipo_a" name="tipo_licencia" value="A"> <label for="tipo_a">A (Moto)</label><br>
+                    <input type="checkbox" id="tipo_b" name="tipo_licencia" value="B"> <label for="tipo_b">B (Auto)</label><br>
+                    <input type="checkbox" id="tipo_c" name="tipo_licencia" value="C"> <label for="tipo_c">C (Otros)</label>
                 </div>
-
-                <div class="license-question">
-                    <label for="license_expiry">¿Cuál es la fecha de vencimiento?</label>
-                    <input type="date" id="license_expiry" name="vencimiento_licencia">
-                    <div id="expiry-validation-message" class="validation-message"></div>
+                <div class="form-group">
+                    <label for="vencimiento_licencia">Fecha de Vencimiento:</label>
+                    <input type="date" id="vencimiento_licencia" name="vencimiento_licencia" style="width: 100%; padding: 8px; box-sizing: border-box;">
                 </div>
             </div>
         </div>
-        <!-- ======================================================= -->
 
-        <div class="button-container">
-            <button type="submit" id="save-button" class="button-link btn-primary" disabled>Guardar en la Base de Datos</button>
-            <a href="{{ url_for('index') }}" class="button-link btn-secondary">Cancelar</a>
-        </div>
+        <button type="submit">Confirmar y Guardar en la Base de Datos</button>
     </form>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const hasLicenseYes = document.getElementById('license_yes');
-            const hasLicenseNo = document.getElementById('license_no');
-            const additionalQuestions = document.getElementById('additional-questions');
-            const licenseCheckboxes = document.querySelectorAll('input[name="tipo_licencia"]');
-            const licenseExpiry = document.getElementById('license_expiry');
-            const saveButton = document.getElementById('save-button');
-            const expiryValidationMessage = document.getElementById('expiry-validation-message');
-
-            // Función para obtener la fecha de hoy en formato YYYY-MM-DD
-            function getTodayString() {
-                const today = new Date();
-                const year = today.getFullYear();
-                const month = String(today.getMonth() + 1).padStart(2, '0');
-                const day = String(today.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            }
-
-            // Establecer la fecha mínima para el input de fecha
-            licenseExpiry.min = getTodayString();
-
-            function validateForm() {
-                let isValid = false;
-                expiryValidationMessage.textContent = ''; // Limpiar mensaje
-
-                if (hasLicenseNo.checked) {
-                    isValid = true;
-                } else if (hasLicenseYes.checked) {
-                    const isTypeSelected = document.querySelector('input[name="tipo_licencia"]:checked') !== null;
-                    const isExpirySelected = licenseExpiry.value !== '';
-                    
-                    if (isExpirySelected && licenseExpiry.value < getTodayString()) {
-                        expiryValidationMessage.textContent = 'La licencia está vencida. Por favor, selecciona "No" en la primera pregunta.';
-                        isValid = false;
-                    } else {
-                        isValid = isTypeSelected && isExpirySelected;
-                    }
-                }
-                saveButton.disabled = !isValid;
-            }
-
-            function toggleAdditionalQuestions() {
-                if (hasLicenseYes.checked) {
-                    additionalQuestions.style.display = 'block';
-                    licenseExpiry.required = true;
+        // Script para mostrar/ocultar los detalles de la licencia
+        const licenseDetails = document.getElementById('license-details');
+        document.querySelectorAll('input[name="tiene_licencia"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                if (this.value === 'si') {
+                    licenseDetails.style.display = 'block';
                 } else {
-                    additionalQuestions.style.display = 'none';
-                    licenseExpiry.required = false;
-                    licenseCheckboxes.forEach(cb => cb.checked = false);
-                    licenseExpiry.value = '';
+                    licenseDetails.style.display = 'none';
                 }
-                validateForm();
-            }
-
-            // Lógica para permitir solo una selección por categoría
-            document.querySelectorAll('.license-category').forEach(fieldset => {
-                fieldset.addEventListener('change', function(event) {
-                    if (event.target.type === 'checkbox') {
-                        // Desmarcar otros checkboxes en el mismo fieldset
-                        fieldset.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                            if (cb !== event.target) {
-                                cb.checked = false;
-                            }
-                        });
-                        validateForm(); // Revalidar el formulario después del cambio
-                    }
-                });
             });
-
-            hasLicenseYes.addEventListener('change', toggleAdditionalQuestions);
-            hasLicenseNo.addEventListener('change', toggleAdditionalQuestions);
-            licenseExpiry.addEventListener('change', validateForm);
-            validateForm();
         });
     </script>
 </body>

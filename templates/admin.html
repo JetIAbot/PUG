@@ -4,81 +4,80 @@
     <meta charset="UTF-8">
     <title>Panel de Administrador</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: auto; padding: 20px; background-color: #f8f9fa; color: #343a40; }
-        .container { text-align: center; background-color: white; border: 1px solid #dee2e6; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h1 { color: #007bff; }
-        button { font-size: 1.2em; padding: 12px 24px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.2s; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f6f9; color: #333; }
+        .header { background-color: #fff; padding: 15px 30px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; color: #007bff; }
+        .header .user-info a { color: #dc3545; text-decoration: none; font-weight: bold; }
+        .container { max-width: 800px; margin: 40px auto; padding: 30px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        p { line-height: 1.6; }
+        button { font-size: 1.1em; padding: 12px 25px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.2s; }
         button:hover { background-color: #0056b3; }
-        #resultado-container { margin-top: 20px; text-align: left; }
-        pre { background-color: #e9ecef; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; border: 1px solid #ced4da; }
-        .spinner { display: none; margin: 20px auto; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        /* Estilos para los mensajes flash (puedes copiarlos de index.html) */
-        .flash-messages { list-style: none; padding: 0; margin-bottom: 20px; }
-        .flash-messages li { padding: 15px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
-        .flash-messages .error { background-color: #f8d7da; color: #721c24; }
-        .flash-messages .success { background-color: #d4edda; color: #155724; }
-        .flash-messages .info { background-color: #cce5ff; color: #004085; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        #results-container { margin-top: 30px; background-color: #e9ecef; border: 1px solid #ced4da; border-radius: 5px; padding: 20px; display: none; }
+        #results-container h2 { margin-top: 0; }
+        #results-output { background-color: #212529; color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; font-family: "Courier New", Courier, monospace; }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Panel de Administrador</h1>
+    <div class="header">
+        <h1>Panel de Control</h1>
         <div class="user-info">
-            <span>Bienvenido, <strong>{{ session.get('user_name', 'Admin') }}</strong> ({{ session.get('user_role') }})</span>
+            <span>Bienvenido, <strong>{{ session.user_name }}</strong> ({{ session.user_role }})</span> | 
             <a href="{{ url_for('admin_logout') }}">Cerrar Sesión</a>
         </div>
-    </header>
-    
-    <!-- ========= BLOQUE DE MENSAJES AÑADIDO ========= -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <ul class="flash-messages">
-            {% for category, message in messages %}
-                <li class="{{ category }}">{{ message }}</li>
-            {% endfor %}
-            </ul>
-        {% endif %}
-    {% endwith %}
-    <!-- ============================================= -->
+    </div>
 
     <div class="container">
+        <h2>Matchmaking de Viajes</h2>
         <p>
-            Haz clic en el botón para ejecutar el algoritmo de matchmaking y encontrar
-            los grupos de viaje compatibles basados en los horarios de la base de datos.
+            Haz clic en el botón para ejecutar el algoritmo de matchmaking. El sistema analizará
+            todos los horarios en la base de datos y mostrará los grupos de viaje compatibles.
         </p>
-        <button id="btn-matchmaking">Encontrar Grupos de Viaje</button>
-        <div class="spinner" id="spinner"></div>
-        <div id="resultado-container"></div>
+        
+        <form id="matchmaking-form">
+            <button id="run-button" type="submit">Encontrar Grupos de Viaje</button>
+        </form>
+
+        <div id="results-container">
+            <h2 id="results-title"></h2>
+            <pre id="results-output"></pre>
+        </div>
     </div>
 
     <script>
-        document.getElementById('btn-matchmaking').addEventListener('click', function() {
-            const btn = this;
-            const spinner = document.getElementById('spinner');
-            const resultadoContainer = document.getElementById('resultado-container');
+        document.getElementById('matchmaking-form').addEventListener('submit', function(event) {
+            event.preventDefault(); // Evita que el formulario se envíe de la forma tradicional
 
-            // Deshabilitar botón y mostrar spinner
-            btn.disabled = true;
-            spinner.style.display = 'block';
-            resultadoContainer.innerHTML = '';
+            const runButton = document.getElementById('run-button');
+            const resultsContainer = document.getElementById('results-container');
+            const resultsTitle = document.getElementById('results-title');
+            const resultsOutput = document.getElementById('results-output');
+
+            // Muestra feedback al usuario
+            runButton.disabled = true;
+            runButton.textContent = 'Procesando...';
+            resultsContainer.style.display = 'block';
+            resultsTitle.textContent = 'Ejecutando Algoritmo...';
+            resultsOutput.textContent = 'Por favor, espera. Esto puede tardar unos segundos.';
 
             fetch('/ejecutar-matchmaking', {
                 method: 'POST'
             })
             .then(response => response.json())
             .then(data => {
-                let html = `<h3>${data.titulo}</h3>`;
-                html += `<pre><code>${data.salida}</code></pre>`;
-                resultadoContainer.innerHTML = html;
+                // Muestra los resultados recibidos del servidor
+                resultsTitle.textContent = data.titulo;
+                resultsOutput.textContent = data.salida;
             })
             .catch(error => {
-                resultadoContainer.innerHTML = `<pre><code>Error de conexión: ${error}</code></pre>`;
+                // Maneja errores de red o del servidor
+                resultsTitle.textContent = 'Error de Conexión';
+                resultsOutput.textContent = 'No se pudo completar la solicitud. Error: ' + error;
             })
             .finally(() => {
-                // Habilitar botón y ocultar spinner
-                btn.disabled = false;
-                spinner.style.display = 'none';
+                // Restaura el botón a su estado original
+                runButton.disabled = false;
+                runButton.textContent = 'Encontrar Grupos de Viaje';
             });
         });
     </script>

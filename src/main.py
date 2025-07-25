@@ -4,165 +4,257 @@
 import argparse
 import json
 import logging
-from typing import Dict, List, Optional
-import time
+from typing import Dict, List
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
+# Importamos las constantes centralizadas. Esta es la única fuente de selectores.
+from . import constants
+
 # --- CONFIGURACIÓN DE LOGGING ---
 # Reemplazamos print() por un sistema de logging más robusto
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- CONSTANTES DE CONFIGURACIÓN Y LOCALIZADORES ---
-URL_LOGIN = "https://segreteria.unigre.it/asp/authenticate.asp"
+# --- FUNCIONES DE EXTRACCIÓN ---
 
-# Localizadores de Selenium
-LOGIN_USER_FIELD = (By.NAME, 'txtName')
-LOGIN_PASS_FIELD = (By.NAME, 'txtPassword')
-LOGIN_BUTTON = (By.CLASS_NAME, 'verdanaCorpo12B_2')
-LOGIN_ERROR_MESSAGE = (By.XPATH, "//font[contains(text(), 'errato')]") # Para detectar login fallido
-SCHEDULE_LINK = (By.LINK_TEXT, 'Orario Settimanale')
-PERSONAL_DATA_TABLE = (By.ID, 'GridView1')
-SCHEDULE_DIV_CONTAINER = (By.ID, 'orario1sem')
-
-
-def realizar_scraping(usuario, contrasena):
+def extraer_datos_personales(driver: webdriver.Chrome) -> Dict[str, str]:
     """
-    Realiza el web scraping en el portal de la universidad.
-    Devuelve un diccionario con los datos o lanza una excepción si falla.
+    Busca la tabla de datos personales, la parsea y extrae la información.
     """
-    URL_PORTAL = "https://segreteria.unigre.it/asp/authenticate.asp" # Asegúrate de que esta es la URL que ya verificaste
+    logging.info("Extrayendo datos personales...")
+    try:
+        wait = WebDriverWait(driver, 10)
+        wait.until(EC.presence_of_element_located(constants.DATOS_TABLA_INFO_PERSONAL))
+        
+        tabla_html = driver.find_element(*constants.DATOS_TABLA_INFO_PERSONAL).get_attribute('outerHTML')
+        soup = BeautifulSoup(tabla_html, 'html.parser')
+        
+        fila_datos = soup.find_all('tr')[1]
+        celdas = fila_datos.find_all('td')
+        
+        # CORRECCIÓN 1: Ahora esperamos 4 columnas en lugar de 3.
+        if len(celdas) < 4:
+            raise IndexError("La tabla de datos personales no tiene la estructura esperada (se esperaban 4 columnas).")
+            
+        # CORRECCIÓN 2: Añadimos el nuevo campo 'data_nascita' desde la cuarta celda.
+        datos = {
+            'matricola': celdas[0].get_text(strip=True),
+            'cognome': celdas[1].get_text(strip=True),
+            'nome': celdas[2].get_text(strip=True),
+            'data_nascita': celdas[3].get_text(strip=True)
+        }
+        logging.info(f"Datos personales extraídos: {datos['matricola']}, Nacimiento: {datos['data_nascita']}")
+        return datos
+        
+    except Exception as e:
+        logging.error(f"No se pudieron extraer los datos personales: {e}")
+        raise ValueError("La tabla de datos personales no se encontró o tiene un formato inesperado.")
 
+def extraer_datos_horario(driver: webdriver.Chrome) -> List[Dict[str, str]]:
+    """
+    Busca el contenedor del horario, lo parsea y extrae todas las clases.
+    """
+    logging.info("Extrayendo datos del horario...")
+    try:
+        wait = WebDriverWait(driver, 10)
+        wait.until(EC.presence_of_element_located(constants.HORARIO_CONTENEDOR_PRINCIPAL))
+        
+        contenedor_html = driver.find_element(*constants.HORARIO_CONTENEDOR_PRINCIPAL).get_attribute('outerHTML')
+        soup = BeautifulSoup(contenedor_html, 'html.parser')
+        
+        horario_final = []
+        dias_semana = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+        
+        tablas_horario = soup.find_all('table')
+        if not tablas_horario:
+            logging.warning("No se encontraron tablas de horario en la página.")
+            return []
+
+        for tabla in tablas_horario:
+            filas = tabla.find_all('tr')
+            if not filas: continue
+
+            # Itera sobre las filas de datos (saltando el encabezado de los días)
+            for fila in filas[1:]:
+                celdas = fila.find_all(['th', 'td'])
+                if not celdas: continue
+                
+                # La primera celda es la hora (ej: 'I', 'II', etc.)
+                bloque_horario = celdas[0].get_text(strip=True)
+                
+                # Itera sobre las celdas de las clases (saltando la celda de la hora)
+                for i, celda_clase in enumerate(celdas[1:]):
+                    info_clase = celda_clase.get_text(strip=True)
+                    # Si la celda no está vacía, hemos encontrado una clase
+                    if info_clase:
+                        horario_final.append({
+                            "dia": dias_semana[i],
+                            "hora": bloque_horario,
+                            "info_clase": info_clase
+                        })
+        
+        logging.info(f"Se encontraron {len(horario_final)} bloques de clase.")
+        return horario_final
+
+    except Exception as e:
+        logging.error(f"No se pudieron extraer los datos del horario: {e}")
+        raise ValueError("El contenedor del horario no se encontró o tiene un formato inesperado.")
+
+# --- FUNCIÓN PRINCIPAL DE SCRAPING ---
+
+def realizar_scraping(usuario: str, contrasena: str) -> Dict:
+    """
+    Flujo completo y unificado de scraping: login, extracción de datos y navegación.
+    Esta es la única función que la aplicación (vía Celery) debe llamar.
+    """
     options = webdriver.ChromeOptions()
-    
-    # --- CAMBIO DE DEPURACIÓN: COMENTA LA LÍNEA HEADLESS ---
-    # options.add_argument("--headless") 
-    # ----------------------------------------------------
-
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     driver = webdriver.Chrome(options=options)
     
+    wait = WebDriverWait(driver, 15)
+
     try:
-        # --- PRUEBA DE CONTROL ---
-        print("PASO DE DEPURACIÓN: Intentando acceder a https://www.google.com")
-        driver.get("https://www.google.com")
-        time.sleep(2) # Espera 2 segundos para que veas la página
-        print("PASO DE DEPURACIÓN: Acceso a Google exitoso.")
-        # -------------------------
+        logging.info(f"Accediendo al portal: {constants.URL_PORTAL_UNIVERSIDAD}")
+        driver.get(constants.URL_PORTAL_UNIVERSIDAD)
 
-        print(f"PASO DE DEPURACIÓN: Intentando acceder a {URL_PORTAL}")
-        driver.get(URL_PORTAL)
-        print("PASO DE DEPURACIÓN: Acceso al portal exitoso.")
+        # --- Login ---
+        wait.until(EC.visibility_of_element_located(constants.LOGIN_CAMPO_USUARIO)).send_keys(usuario)
+        wait.until(EC.visibility_of_element_located(constants.LOGIN_CAMPO_CONTRASENA)).send_keys(contrasena)
+        wait.until(EC.element_to_be_clickable(constants.LOGIN_BOTON_ENTRAR)).click()
 
-        # Lógica de login
-        driver.find_element(By.ID, "mat").send_keys(usuario)
-        driver.find_element(By.ID, "pin").send_keys(contrasena)
-        driver.find_element(By.ID, "login").click()
-        
-        WebDriverWait(driver, 10).until(EC.url_contains("home.aspx"))
-
-        # Verificar si el login fue exitoso
-        if "login.aspx" in driver.current_url:
-            raise ValueError("Credenciales de usuario incorrectas o login fallido.")
-
-        # Extraer datos personales
-        driver.get("https://www.issrapug.it/ssp/dati_anagrafici.aspx")
-        time.sleep(2)
-        
-        nome = driver.find_element(By.ID, "nome").get_attribute('value')
-        cognome = driver.find_element(By.ID, "cognome").get_attribute('value')
-        
-        datos_personales = {
-            "matricola": usuario,
-            "nome": nome,
-            "cognome": cognome
-        }
-
-        # Extraer horario
-        driver.get("https://www.issrapug.it/ssp/orario.aspx")
-        time.sleep(2)
-        
-        horario = []
+        # --- Verificación Post-Login ---
         try:
-            tabla_horario = driver.find_element(By.ID, "orario")
-            filas = tabla_horario.find_elements(By.TAG_NAME, "tr")[1:]
-            for fila in filas:
-                celdas = fila.find_elements(By.TAG_NAME, "td")
-                if len(celdas) == 3:
-                    horario.append({
-                        "dia": celdas[0].text,
-                        "bloque_horario": celdas[1].text,
-                        "info_clase": celdas[2].text
-                    })
-        except:
-            # Es normal no encontrar la tabla si no hay horario publicado
+            error_wait = WebDriverWait(driver, 5)
+            error_wait.until(EC.visibility_of_element_located(constants.LOGIN_ERROR_MESSAGE))
+            raise ValueError("Credenciales incorrectas. Por favor, verifica tu usuario y contraseña.")
+        except TimeoutException:
+            logging.info("No se encontró mensaje de error, verificando login exitoso...")
             pass
 
-        return {
-            "datos_personales": datos_personales,
-            "horario": horario,
-            "error": None
-        }
+        wait.until(EC.visibility_of_element_located(constants.POST_LOGIN_ELEMENTO_BIENVENIDA))
+        logging.info("Login exitoso.")
+
+        # --- Extracción de Datos ---
+        datos_personales = extraer_datos_personales(driver)
+        
+        logging.info("Navegando a la página del horario...")
+        wait.until(EC.element_to_be_clickable(constants.NAV_LINK_HORARIO)).click()
+        
+        # CORRECCIÓN 1: Llamamos a la función de extracción de horario nueva y robusta.
+        horario = extraer_horario(driver)
+
+        return {"datos_personales": datos_personales, "horario": horario}
+
     except Exception as e:
-        print(f"ERROR DETALLADO EN SCRAPING: {e}")
+        logging.error(f"Error durante el proceso de scraping: {e}")
+        driver.save_screenshot('error_screenshot.png')
         raise e
     finally:
-        print("PASO DE DEPURACIÓN: Cerrando el driver de Selenium.")
-        time.sleep(5) # Pausa de 5 segundos para que puedas ver la ventana final antes de que se cierre
         driver.quit()
 
-# --- FLUJO PRINCIPAL DE EJECUCIÓN ---
-def main():
-    """Función principal que orquesta el proceso de scraping."""
-    parser = argparse.ArgumentParser(description="Extrae el horario de un estudiante de la PUG.")
-    parser.add_argument('--usuario', required=True, help='Usuario del portal de la universidad.')
+def extraer_horario(driver: WebDriver) -> List[Dict[str, any]]:
+    """
+    Extrae los horarios de las tablas de ambos semestres.
+    Está diseñado para manejar correctamente celdas vacías y tablas inexistentes.
+    """
+    logging.info("Iniciando extracción de horarios...")
+    horario_completo = []
+    
+    # Mapeo de selectores de tabla a número de semestre
+    tablas_semestres = {
+        1: constants.HORARIO_TABLA_SEMESTRE_1,
+        2: constants.HORARIO_TABLA_SEMESTRE_2
+    }
+
+    for semestre, selector_tabla in tablas_semestres.items():
+        try:
+            logging.info(f"Buscando tabla para el semestre {semestre}...")
+            # Espera a que la tabla esté presente, pero con un tiempo de espera corto.
+            # Si no la encuentra, no es un error, simplemente no hay tabla.
+            WebDriverWait(driver, 5).until(EC.presence_of_element_located(selector_tabla))
+            tabla_html = driver.find_element(*selector_tabla).get_attribute('outerHTML')
+            soup = BeautifulSoup(tabla_html, 'html.parser')
+            
+            filas = soup.find_all('tr')
+            
+            # La primera fila contiene los nombres de los días, la omitimos (índice 0)
+            if len(filas) < 2:
+                logging.warning(f"La tabla del semestre {semestre} no contiene filas de datos.")
+                continue
+
+            # La segunda fila (índice 1) contiene las horas, la extraemos
+            horas_columnas = [th.get_text(strip=True) for th in filas[1].find_all('th') if th.get_text(strip=True)]
+
+            # Iteramos sobre el resto de las filas (a partir del índice 2), que son los días
+            for fila in filas[2:]:
+                celdas = fila.find_all('td')
+                # La primera celda es el nombre del día
+                dia_semana = celdas[0].get_text(strip=True)
+                
+                # Iteramos sobre las celdas de las clases (a partir del índice 1)
+                for i, celda_clase in enumerate(celdas[1:]):
+                    # MANEJO DE CELDAS VACÍAS: Si la celda no tiene texto, la ignoramos.
+                    materia = celda_clase.get_text(strip=True)
+                    if materia:
+                        horario_completo.append({
+                            "semestre": semestre,
+                            "dia": dia_semana,
+                            "hora": horas_columnas[i],
+                            "materia": materia
+                        })
+                        logging.info(f"Clase encontrada: Sem {semestre}, {dia_semana} a las {horas_columnas[i]} - {materia}")
+
+        except TimeoutException:
+            # Esto es normal si la universidad aún no ha publicado la tabla para un semestre.
+            logging.info(f"No se encontró la tabla de horarios para el semestre {semestre}. Se omitirá.")
+        except Exception as e:
+            logging.error(f"Ocurrió un error inesperado al procesar el semestre {semestre}: {e}")
+
+    return horario_completo
+
+# CORRECCIÓN 2: Se ha simplificado drásticamente esta función para eliminar el error.
+def run_scraping_task(usuario: str, contrasena: str) -> str:
+    """
+    Función principal que orquesta todo el proceso de scraping.
+    Llama a la función de scraping y devuelve el resultado en formato JSON.
+    """
+    try:
+        # Llama a la función principal que hace todo el trabajo y devuelve el resultado.
+        resultado_completo = realizar_scraping(usuario, contrasena)
+        
+        # Convierte el diccionario de resultado a una cadena JSON.
+        return json.dumps(resultado_completo, indent=4)
+    
+    except Exception as e:
+        # En caso de cualquier error durante el scraping, retorna un JSON de error.
+        logging.error(f"La tarea de scraping falló con el error: {e}")
+        return json.dumps({"error": str(e)})
+    
+# --- PUNTO DE ENTRADA PARA PRUEBAS LOCALES ---
+if __name__ == '__main__':
+    """
+    Permite ejecutar el script desde la línea de comandos para pruebas rápidas,
+    usando la misma lógica que la aplicación web.
+    Ejemplo: python -m src.main --usuario TU_USUARIO --contrasena TU_CONTRASENA
+    """
+    parser = argparse.ArgumentParser(description="Extrae el horario de un estudiante.")
+    parser.add_argument('--usuario', required=True, help='Usuario del portal.')
     parser.add_argument('--contrasena', required=True, help='Contraseña del portal.')
     args = parser.parse_args()
 
-    driver = None
-    datos_finales = {}
-
     try:
-        driver = configurar_driver()
-        wait = WebDriverWait(driver, 15) # Reducido a 15s, suficiente para la mayoría de casos
-        
-        iniciar_sesion(driver, wait, args.usuario, args.contrasena)
-        navegar_a_horarios(driver, wait)
-        
-        datos_personales = extraer_datos_personales(driver, wait)
-        horario_extraido = extraer_datos_horario(driver)
-        
-        datos_finales = {
-            "datos_personales": datos_personales,
-            "horario": horario_extraido
-        }
-
-    except (TimeoutException, NoSuchElementException) as e:
-        error_msg = f"No se pudo encontrar un elemento en la página. Puede que la web haya cambiado o esté en mantenimiento. Detalles: {e.__class__.__name__}"
-        logging.error(error_msg)
-        datos_finales["error"] = error_msg
-    except ValueError as e: # Captura el error de login incorrecto
-        logging.error(str(e))
-        datos_finales["error"] = str(e)
+        resultado = realizar_scraping(args.usuario, args.contrasena)
+        print(json.dumps(resultado, indent=4))
     except Exception as e:
-        error_msg = f"Ha ocurrido un error inesperado: {e.__class__.__name__} - {e}"
-        logging.error(error_msg)
-        datos_finales["error"] = error_msg
-    finally:
-        if driver:
-            driver.quit()
-        # Imprimimos el resultado final como un string JSON para que Flask lo capture.
-        print(json.dumps(datos_finales, indent=4))
-
-if __name__ == '__main__':
-    main()
+        # Imprime un JSON de error si el scraping falla
+        print(json.dumps({"error": str(e)}))
