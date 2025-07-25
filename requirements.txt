@@ -2,17 +2,15 @@
 Flask==2.3.2
 celery==5.3.6
 redis==5.0.1
-
-# Dependencias para la base de datos y el entorno
-firebase-admin==6.2.0
 python-dotenv==1.0.0
+google-cloud-firestore==2.14.0
+firebase-admin==6.3.0
+werkzeug==2.3.7
 
-# Dependencias para el web scraping
-selenium==4.11.2
-webdriver-manager==4.0.0
-
-# Dependencia para la seguridad (hashing de contraseñas)
-Werkzeug==2.3.6
+# Dependencias para Web Scraping (Selenium y Parsers)
+selenium==4.15.0
+webdriver-manager==4.0.1
+beautifulsoup4==4.12.2
 
 # Para instalar todas las dependencias, ejecuta:
 # pip install -r requirements.txt
