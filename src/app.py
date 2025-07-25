@@ -1,35 +1,77 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+import os
+import json
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, current_app
+from celery import Celery
 from functools import wraps
 from datetime import datetime
-import json
-import os
-from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, firestore
 from werkzeug.security import check_password_hash
-from celery import Celery
 import subprocess
 import sys
 import logging
+from dotenv import load_dotenv
 
-# --- CONFIGURACIÓN INICIAL ---
+# --- FÁBRICA DE CELERY ---
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        backend=app.config['CELERY_RESULT_BACKEND'],
+        broker=app.config['CELERY_BROKER_URL']
+    )
+    celery.conf.update(app.config)
+
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery.Task = ContextTask
+    return celery
+
+# --- FÁBRICA DE LA APLICACIÓN FLASK ---
+def create_app():
+    app = Flask(__name__, template_folder='../templates')
+    app.config.from_mapping(
+        SECRET_KEY=os.getenv('FLASK_SECRET_KEY', 'dev'),
+        CELERY_BROKER_URL='redis://localhost:6379/0',
+        CELERY_RESULT_BACKEND='redis://localhost:6379/0'
+    )
+    
+    # Inicializar Firebase dentro de la fábrica
+    try:
+        if not firebase_admin._apps:
+            cred = credentials.Certificate("credenciales.json")
+            firebase_admin.initialize_app(cred)
+        # No asignamos db globalmente, lo manejaremos a través del contexto de la app si es necesario
+    except Exception as e:
+        app.logger.error(f"Error Crítico: No se pudo inicializar Firebase. Error: {e}")
+
+    # Registrar las rutas (blueprints) o adjuntarlas aquí
+    # Por simplicidad, mantendremos las rutas en este archivo por ahora.
+    # Las rutas que usan 'app' ahora usarán 'current_app' o se definirán dentro de la fábrica.
+
+    return app
+
+# --- INICIALIZACIÓN ---
 load_dotenv()
-app = Flask(__name__, template_folder='../templates')
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'una-clave-secreta-por-defecto-solo-para-desarrollo')
+app = create_app()
+celery_app = make_celery(app)
+db = firestore.client() # Inicializar db después de Firebase
 
-# --- INICIALIZACIÓN DE CELERY (ERROR CORREGIDO) ---
-# Se define el objeto celery_app que faltaba, conectándolo a Redis.
-celery_app = Celery('tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
-
-# --- INICIALIZACIÓN DE FIREBASE ---
-try:
-    if not firebase_admin._apps:
-        cred = credentials.Certificate("credenciales.json")
-        firebase_admin.initialize_app(cred)
-    db = firestore.client()
-except Exception as e:
-    print(f"Error Crítico: No se pudo inicializar Firebase. Error: {e}")
-    db = None
+# --- TAREA DE CELERY ---
+# La tarea ahora se define usando la instancia 'celery_app' creada por la fábrica
+@celery_app.task(name='src.app.run_scraping_task')
+def run_scraping_task(matricula, password):
+    """
+    Tarea de Celery que ejecuta el proceso de scraping.
+    """
+    # CORRECCIÓN: Usamos una importación relativa.
+    # El punto (.) le dice a Python que importe 'scraping' desde el paquete actual ('src').
+    from .main import realizar_scraping
+    
+    # Asumiendo que la función principal de scraping está en main.py y se llama realizar_scraping
+    return realizar_scraping(matricula, password)
 
 # --- SECCIÓN DE AUTENTICACIÓN Y AUTORIZACIÓN (RESTAURADA) ---
 def login_required(role="Admin"):
@@ -66,18 +108,83 @@ def extraer_datos():
         return redirect(url_for('index'))
 
     try:
-        task = celery_app.send_task('tasks.run_scraping_task', args=[usuario, contrasena])
-        resultado_json_str = task.get(timeout=180)
-        datos_extraidos = json.loads(resultado_json_str)
-
-        if "error" in datos_extraidos:
-            flash(f"Error durante la extracción: {datos_extraidos['error']}", "error")
-            return redirect(url_for('index'))
-
-        return render_template('revisar.html', datos=datos_extraidos)
+        # CORRECCIÓN: Llamar a la tarea de forma asíncrona y redirigir.
+        # Se usa el nombre explícito de la tarea para evitar errores.
+        task = celery_app.send_task('src.app.run_scraping_task', args=[usuario, contrasena])
+        
+        # Guardamos el ID de la tarea en la sesión para poder consultar su estado después.
+        session['task_id'] = task.id
+        
+        # Redirigimos a una página de espera o de revisión.
+        # Asumimos que la página 'revisar' puede manejar la espera.
+        return redirect(url_for('revisar'))
+        
     except Exception as e:
+        current_app.logger.error(f"Error al iniciar la tarea Celery: {e}")
         flash(f"Ocurrió un error crítico al procesar tu solicitud: {e}", "error")
         return redirect(url_for('index'))
+
+# --- NUEVA RUTA DE REVISIÓN Y ESTADO ---
+@app.route('/revisar')
+def revisar():
+    """
+    Muestra la página de espera/revisión. Pasa el ID de la tarea a la plantilla.
+    """
+    task_id = session.get('task_id')
+    if not task_id:
+        flash("No se ha iniciado ninguna tarea de extracción de datos.", "warning")
+        return redirect(url_for('index'))
+    return render_template('revisar.html', task_id=task_id)
+
+@app.route('/task-status/<task_id>')
+def task_status(task_id):
+    """
+    Endpoint de API para consultar el estado de una tarea de Celery.
+    """
+    task = celery_app.AsyncResult(task_id)
+    
+    if task.state == 'SUCCESS':
+        # La tarea terminó correctamente. El resultado está en task.result.
+        # El resultado de ejecutar_scraping es un string JSON, lo parseamos.
+        try:
+            # El resultado de la tarea es un string JSON, lo convertimos a un objeto.
+            result_data = json.loads(task.result)
+            # Si el scraping devolvió un error interno, lo tratamos como una falla.
+            if 'error' in result_data:
+                 response = {
+                    'state': 'FAILURE',
+                    'status': result_data['error']
+                }
+            else:
+                response = {
+                    'state': task.state,
+                    'result': result_data
+                }
+        except (json.JSONDecodeError, TypeError):
+             # Esto ocurre si la tarea devuelve algo que no es JSON válido.
+             response = {
+                'state': 'FAILURE',
+                'status': f"Error interno: La tarea devolvió un formato inesperado."
+            }
+
+    elif task.state == 'FAILURE':
+        # La tarea falló. La información del error está en task.info.
+        response = {
+            'state': task.state,
+            'status': str(task.info),  # task.info contiene la excepción.
+        }
+    elif task.state == 'PENDING':
+        # La tarea aún no ha sido recogida por un worker.
+        response = {'state': task.state, 'status': 'Tarea pendiente...'}
+    else:
+        # La tarea está en un estado intermedio (ej. PROGRESS, RETRY).
+        response = {
+            'state': task.state,
+            'status': str(task.info) # Devolvemos la info que haya (ej. 'Procesando...')
+        }
+        
+    return jsonify(response)
+
 
 # --- RUTA DE GUARDADO (RESTAURADA Y CRÍTICA) ---
 @app.route('/guardar_horario', methods=['POST'])

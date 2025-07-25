@@ -15,46 +15,30 @@
         .form-group { margin-bottom: 15px; }
         label { font-weight: bold; }
         .license-details { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; }
+        #status-container { text-align: center; padding: 40px; font-size: 1.2em; }
+        #review-form { display: none; } /* Ocultar el formulario inicialmente */
     </style>
 </head>
 <body>
     <h1>Revisa y Completa tus Datos</h1>
-    <p>Confirma que la información extraída es correcta y completa los datos adicionales antes de guardar.</p>
 
-    <form action="{{ url_for('guardar_horario') }}" method="post">
-        <div class="card">
+    <!-- Contenedor para mostrar el estado de la tarea -->
+    <div id="status-container">
+        <p id="status-message">Extrayendo tus datos del portal. Por favor, espera...</p>
+        <p><small>(Esto puede tardar hasta un minuto)</small></p>
+    </div>
+
+    <!-- El formulario estará oculto hasta que los datos estén listos -->
+    <form id="review-form" action="{{ url_for('guardar_horario') }}" method="post">
+        <!-- Los campos se llenarán dinámicamente con JavaScript -->
+        <div class="card" id="personal-data-card">
             <h2>Datos Personales</h2>
-            <p><strong>Matrícula:</strong> {{ datos.datos_personales.matricola }}</p>
-            <p><strong>Nombre:</strong> {{ datos.datos_personales.nome }}</p>
-            <p><strong>Apellido:</strong> {{ datos.datos_personales.cognome }}</p>
-            <!-- CORRECCIÓN 5: Mostramos la fecha de nacimiento extraída -->
-            <p><strong>Fecha de Nacimiento:</strong> {{ datos.datos_personales.data_nascita }}</p>
-            
-            <input type="hidden" name="matricola" value="{{ datos.datos_personales.matricola }}">
-            <input type="hidden" name="nome" value="{{ datos.datos_personales.nome }}">
-            <input type="hidden" name="cognome" value="{{ datos.datos_personales.cognome }}">
-            <!-- CORRECCIÓN 6: Añadimos un campo oculto para enviar la fecha de nacimiento -->
-            <input type="hidden" name="data_nascita" value="{{ datos.datos_personales.data_nascita }}">
         </div>
 
-        <div class="card">
+        <div class="card" id="schedule-card">
             <h2>Horario Extraído</h2>
-            {% if datos.horario %}
-                {% for clase in datos.horario %}
-                    <div class="horario-item">
-                        <!-- CORRECCIÓN 1: Se usa 'clase.hora' en lugar de 'clase.bloque_horario' -->
-                        <span><strong>{{ clase.dia }}</strong> - Bloque {{ clase.hora }}</span>
-                        <span>{{ clase.info_clase }}</span>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p class="empty">No se encontraron clases en el horario.</p>
-            {% endif %}
-            <!-- CORRECCIÓN 2: Se añade un campo oculto para enviar el horario como JSON -->
-            <input type="hidden" name="horario_json" value="{{ datos.horario | tojson }}">
         </div>
 
-        <!-- CORRECCIÓN 3: Se añade la sección para la información de conducción -->
         <div class="card">
             <h2>Información de Conducción</h2>
             <div class="form-group">
@@ -62,7 +46,6 @@
                 <input type="radio" id="licencia_si" name="tiene_licencia" value="si" required> <label for="licencia_si">Sí</label>
                 <input type="radio" id="licencia_no" name="tiene_licencia" value="no" checked> <label for="licencia_no">No</label>
             </div>
-
             <div id="license-details" class="license-details">
                 <div class="form-group">
                     <label>Tipo de Licencia (selecciona todas las que apliquen):</label><br>
@@ -81,17 +64,87 @@
     </form>
 
     <script>
+        const taskId = '{{ task_id }}';
+        const statusContainer = document.getElementById('status-container');
+        const statusMessage = document.getElementById('status-message');
+        const reviewForm = document.getElementById('review-form');
+
+        function checkTaskStatus() {
+            fetch(`/task-status/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.state === 'SUCCESS') {
+                        // La tarea terminó, detener la verificación y mostrar los datos
+                        clearInterval(intervalId);
+                        populateForm(data.result);
+                    } else if (data.state === 'FAILURE') {
+                        // La tarea falló
+                        clearInterval(intervalId);
+                        statusMessage.innerHTML = `<strong>Error al extraer los datos:</strong><br>${data.status}`;
+                        statusContainer.style.color = 'red';
+                    } else {
+                        // La tarea sigue en progreso, actualizar mensaje si es necesario
+                        statusMessage.textContent = data.status || 'Procesando...';
+                    }
+                })
+                .catch(err => {
+                    clearInterval(intervalId);
+                    statusMessage.textContent = 'Error de conexión al verificar el estado.';
+                    console.error(err);
+                });
+        }
+
+        function populateForm(datos) {
+            // Ocultar el mensaje de estado y mostrar el formulario
+            statusContainer.style.display = 'none';
+            reviewForm.style.display = 'block';
+
+            // Rellenar datos personales
+            const personalCard = document.getElementById('personal-data-card');
+            const p_data = datos.datos_personales;
+            personalCard.innerHTML += `
+                <p><strong>Matrícula:</strong> ${p_data.matricola}</p>
+                <p><strong>Nombre:</strong> ${p_data.nome}</p>
+                <p><strong>Apellido:</strong> ${p_data.cognome}</p>
+                <p><strong>Fecha de Nacimiento:</strong> ${p_data.data_nascita}</p>
+                <input type="hidden" name="matricola" value="${p_data.matricola}">
+                <input type="hidden" name="nome" value="${p_data.nome}">
+                <input type="hidden" name="cognome" value="${p_data.cognome}">
+                <input type="hidden" name="data_nascita" value="${p_data.data_nascita}">
+            `;
+
+            // Rellenar horario
+            const scheduleCard = document.getElementById('schedule-card');
+            if (datos.horario && datos.horario.length > 0) {
+                datos.horario.forEach(clase => {
+                    scheduleCard.innerHTML += `
+                        <div class="horario-item">
+                            <span><strong>${clase.dia}</strong> - Bloque ${clase.hora}</span>
+                            <span>${clase.info_clase}</span>
+                        </div>
+                    `;
+                });
+            } else {
+                scheduleCard.innerHTML += '<p class="empty">No se encontraron clases en el horario.</p>';
+            }
+            // Añadir el horario completo como un campo oculto JSON
+            const horarioInput = document.createElement('input');
+            horarioInput.type = 'hidden';
+            horarioInput.name = 'horario_json';
+            horarioInput.value = JSON.stringify(datos.horario);
+            scheduleCard.appendChild(horarioInput);
+        }
+
         // Script para mostrar/ocultar los detalles de la licencia
         const licenseDetails = document.getElementById('license-details');
         document.querySelectorAll('input[name="tiene_licencia"]').forEach(radio => {
             radio.addEventListener('change', function() {
-                if (this.value === 'si') {
-                    licenseDetails.style.display = 'block';
-                } else {
-                    licenseDetails.style.display = 'none';
-                }
+                licenseDetails.style.display = (this.value === 'si') ? 'block' : 'none';
             });
         });
+
+        // Iniciar la verificación del estado de la tarea cada 3 segundos
+        const intervalId = setInterval(checkTaskStatus, 3000);
     </script>
 </body>
 </html>
