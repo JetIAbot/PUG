@@ -124,50 +124,49 @@ def encontrar_coincidencias(horarios_aplanados):
 
     return {"ida": grupos_ida, "vuelta": grupos_vuelta}
 
-def imprimir_grupos(grupos_encontrados):
-    """Formatea e imprime los grupos de viaje encontrados."""
-    print("\n" + "="*40)
-    print("      GRUPOS DE VIAJE COMPATIBLES")
-    print("="*40)
+def formatear_grupos_como_string(grupos_encontrados):
+    """Formatea los grupos de viaje encontrados en un string para mostrar en la web."""
+    output = ["="*40, "      GRUPOS DE VIAJE COMPATIBLES", "="*40]
 
-    # Imprimir viajes de IDA
-    print("\n--- VIAJES DE IDA (Llegar a la universidad) ---\n")
+    # Formatear viajes de IDA
+    output.append("\n--- VIAJES DE IDA (Llegar a la universidad) ---\n")
     if not grupos_encontrados['ida']:
-        print("No se encontraron coincidencias para viajes de ida.")
+        output.append("No se encontraron coincidencias para viajes de ida.")
     else:
-        for llave, personas in grupos_encontrados['ida'].items():
+        for llave, personas in sorted(grupos_encontrados['ida'].items()):
             dia, bloque = llave.split('_')
             hora = BLOQUES_A_HORAS.get(bloque, bloque)
-            print(f"Para llegar el {dia} a las {hora}:")
-            print(f"  - Grupo compatible: {', '.join(personas)}\n")
+            output.append(f"Para llegar el {dia} a las {hora}:")
+            output.append(f"  - Grupo compatible: {', '.join(personas)}\n")
 
-    # Imprimir viajes de VUELTA
-    print("\n--- VIAJES DE VUELTA (Salir de la universidad) ---\n")
+    # Formatear viajes de VUELTA
+    output.append("\n--- VIAJES DE VUELTA (Salir de la universidad) ---\n")
     if not grupos_encontrados['vuelta']:
-        print("No se encontraron coincidencias para viajes de vuelta.")
+        output.append("No se encontraron coincidencias para viajes de vuelta.")
     else:
-        for llave, personas in grupos_encontrados['vuelta'].items():
+        for llave, personas in sorted(grupos_encontrados['vuelta'].items()):
             dia, bloque = llave.split('_')
             hora = BLOQUES_A_HORAS.get(bloque, bloque)
-            print(f"Para salir el {dia} a las {hora}:")
-            print(f"  - Grupo compatible: {', '.join(personas)}\n")
+            output.append(f"Para salir el {dia} a las {hora}:")
+            output.append(f"  - Grupo compatible: {', '.join(personas)}\n")
+    
+    return "\n".join(output)
 
-def main():
-    """Función principal que orquesta el proceso de matchmaking."""
+def realizar_matchmaking():
+    """Función principal que orquesta y devuelve los resultados como string."""
     db = inicializar_firebase()
     if not db:
-        print("El script no puede continuar sin una conexión a la base de datos.")
-        return
+        return "Error: No se pudo conectar a la base de datos."
 
     datos_brutos = obtener_datos_de_firestore(db)
-    
     if not datos_brutos:
-        print("No se encontraron datos de estudiantes en Firestore. El script no puede continuar.")
-        return
+        return "No se encontraron datos de estudiantes en Firestore."
 
-    horarios_listos_para_comparar = aplanar_horarios(datos_brutos)
-    grupos_de_viaje = encontrar_coincidencias(horarios_listos_para_comparar)
-    imprimir_grupos(grupos_de_viaje)
+    horarios_listos = aplanar_horarios(datos_brutos)
+    grupos = encontrar_coincidencias(horarios_listos)
+    return formatear_grupos_como_string(grupos)
 
 if __name__ == '__main__':
-    main()
+    # La ejecución directa ahora usa la nueva función principal
+    resultado_string = realizar_matchmaking()
+    print(resultado_string)

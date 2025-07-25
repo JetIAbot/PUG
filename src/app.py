@@ -7,10 +7,10 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import credentials, firestore
 from werkzeug.security import check_password_hash
-import subprocess
-import sys
 import logging
 from dotenv import load_dotenv
+# Importar el módulo de matchmaking
+from src import matchmaking
 
 # --- FÁBRICA DE CELERY ---
 def make_celery(app):
@@ -66,12 +66,12 @@ def run_scraping_task(matricula, password):
     """
     Tarea de Celery que ejecuta el proceso de scraping.
     """
-    # CORRECCIÓN: Usamos una importación relativa.
-    # El punto (.) le dice a Python que importe 'scraping' desde el paquete actual ('src').
-    from .main import realizar_scraping
-    
-    # Asumiendo que la función principal de scraping está en main.py y se llama realizar_scraping
-    return realizar_scraping(matricula, password)
+    # CORRECCIÓN: Importar la función orquestadora desde main.py.
+    # Se usa un alias para evitar un conflicto de nombres con esta misma función de tarea.
+    from src.main import run_scraping_task as perform_scraping
+
+    # Llamar a la función correcta del módulo correcto.
+    return perform_scraping(matricula, password)
 
 # --- SECCIÓN DE AUTENTICACIÓN Y AUTORIZACIÓN (RESTAURADA) ---
 def login_required(role="Admin"):
@@ -292,11 +292,11 @@ def admin_dashboard():
 @login_required(role="Admin")
 def ejecutar_matchmaking():
     try:
-        resultado = subprocess.run([sys.executable, 'src/matchmaking.py'], capture_output=True, text=True, check=True, encoding='utf-8')
-        return jsonify(titulo="Resultado del Matchmaking", salida=resultado.stdout)
-    except subprocess.CalledProcessError as e:
-        return jsonify(titulo="Error en el Matchmaking", salida=f"{e.stderr or e.stdout}"), 500
+        # MEJORA: Llamar a la función directamente. Es más limpio y eficiente.
+        resultado_str = matchmaking.realizar_matchmaking()
+        return jsonify(titulo="Resultado del Matchmaking", salida=resultado_str)
     except Exception as e:
+        current_app.logger.error(f"Error ejecutando matchmaking: {e}")
         return jsonify(titulo="Error inesperado", salida=str(e)), 500
 
 # --- PUNTO DE ENTRADA ---

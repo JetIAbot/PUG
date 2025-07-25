@@ -150,8 +150,8 @@ def realizar_scraping(usuario: str, contrasena: str) -> Dict:
         logging.info("Navegando a la página del horario...")
         wait.until(EC.element_to_be_clickable(constants.NAV_LINK_HORARIO)).click()
         
-        # CORRECCIÓN 1: Llamamos a la función de extracción de horario nueva y robusta.
-        horario = extraer_horario(driver)
+        # CORRECCIÓN: El nombre correcto de la función es 'extraer_datos_horario'.
+        horario = extraer_datos_horario(driver)
 
         return {"datos_personales": datos_personales, "horario": horario}
 
@@ -206,13 +206,17 @@ def extraer_horario(driver: WebDriver) -> List[Dict[str, any]]:
                     # MANEJO DE CELDAS VACÍAS: Si la celda no tiene texto, la ignoramos.
                     materia = celda_clase.get_text(strip=True)
                     if materia:
-                        horario_completo.append({
-                            "semestre": semestre,
-                            "dia": dia_semana,
-                            "hora": horas_columnas[i],
-                            "materia": materia
-                        })
-                        logging.info(f"Clase encontrada: Sem {semestre}, {dia_semana} a las {horas_columnas[i]} - {materia}")
+                        # CORRECCIÓN DE INDEXACIÓN: Asegurarse de que el índice 'i' es válido.
+                        if i < len(horas_columnas):
+                            horario_completo.append({
+                                "semestre": semestre,
+                                "dia": dia_semana,
+                                "hora": horas_columnas[i],
+                                "materia": materia
+                            })
+                            logging.info(f"Clase encontrada: Sem {semestre}, {dia_semana} a las {horas_columnas[i]} - {materia}")
+                        else:
+                            logging.warning(f"Se encontró una materia ('{materia}') pero no hay una columna de hora correspondiente en el índice {i}. Se omitirá.")
 
         except TimeoutException:
             # Esto es normal si la universidad aún no ha publicado la tabla para un semestre.
