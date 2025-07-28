@@ -115,11 +115,16 @@ def realizar_scraping(usuario: str, contrasena: str) -> Dict:
     Flujo completo y unificado de scraping: login, extracción de datos y navegación.
     Esta es la única función que la aplicación (vía Celery) debe llamar.
     """
+    # --- RE-ADAPTACIÓN PARA WINDOWS ---
+    # Eliminamos las opciones específicas de Linux (--no-sandbox, etc.).
+    # Dejamos la opción --headless comentada por si quieres hacer pruebas sin ver el navegador.
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=options)
+    # options.add_argument("--headless") 
+    
+    # Usamos webdriver-manager para gestionar automáticamente el chromedriver.exe en Windows.
+    # Esto evita tener que descargar el driver manualmente.
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
     
     wait = WebDriverWait(driver, 15)
 
