@@ -91,13 +91,13 @@ Para que la aplicación funcione, necesitas tener **3 terminales abiertas simult
 Este es el trabajador que procesará las tareas. **¡Comando corregido!**
 ```bash
 # La tarea está en app.py, por lo que usamos app.celery
-celery -A app.celery worker --loglevel=info --pool=solo
+celery -A src.app.celery_app worker --loglevel=info --pool=solo
 ```
 *El parámetro `--pool=solo` es importante para la compatibilidad con Windows. Deja esta terminal abierta para ver los logs de las tareas.*
 
 **Terminal 3: Iniciar el Servidor Web Flask**
 ```bash
-python app.py
+python -m src.app
 ```
 *Deja esta terminal abierta.*
 
