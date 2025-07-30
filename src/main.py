@@ -4,7 +4,10 @@
 import argparse
 import json
 import logging
+import os
+from datetime import datetime
 from typing import Dict, List
+from dotenv import load_dotenv
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -19,9 +22,71 @@ from webdriver_manager.chrome import ChromeDriverManager
 # Importamos las constantes centralizadas. Esta es la única fuente de selectores.
 from . import constants
 
+# Cargar variables de entorno
+load_dotenv()
+
 # --- CONFIGURACIÓN DE LOGGING ---
 # Reemplazamos print() por un sistema de logging más robusto
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- FUNCIONES DE PROCESAMIENTO PARA PORTAL REAL ---
+
+def procesar_datos_extraidos(datos_portal: dict, matricola: str) -> dict:
+    """Procesar datos extraídos del portal real y ejecutar matchmaking"""
+    try:
+        logger = logging.getLogger('main_processing')
+        logger.info(f"Procesando datos extraídos para matrícula: {matricola[:2]}****")
+        
+        # Importar funciones de matchmaking
+        from matchmaking import inicializar_firebase, realizar_matchmaking, guardar_en_firebase
+        
+        # Inicializar Firebase
+        db = inicializar_firebase()
+        if not db:
+            return {
+                'success': False,
+                'message': 'Error conectando a Firebase',
+                'errors': ['No se pudo conectar a la base de datos']
+            }
+        
+        # Guardar datos del estudiante en Firebase
+        datos_estudiante = {
+            'perfil': datos_portal.get('perfil', {}),
+            'horario': datos_portal.get('horario', []),
+            'materias': datos_portal.get('materias', []),
+            'calificaciones': datos_portal.get('calificaciones', []),
+            'fecha_actualizacion': json.dumps(datetime.now(), default=str)
+        }
+        
+        # Guardar en Firebase
+        resultado_guardado = guardar_en_firebase(db, matricola, datos_estudiante)
+        if not resultado_guardado['success']:
+            return resultado_guardado
+        
+        # Realizar matchmaking
+        resultado_matchmaking = realizar_matchmaking(db, matricola)
+        
+        return {
+            'success': True,
+            'message': 'Datos procesados y matchmaking completado',
+            'data': {
+                'estudiante': datos_estudiante['perfil'],
+                'matchmaking': resultado_matchmaking,
+                'estadisticas': {
+                    'horarios_guardados': len(datos_estudiante['horario']),
+                    'materias_encontradas': len(datos_estudiante['materias']),
+                    'coincidencias_encontradas': len(resultado_matchmaking.get('coincidencias', []))
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error procesando datos: {e}")
+        return {
+            'success': False,
+            'message': f'Error durante procesamiento: {str(e)}',
+            'errors': [str(e)]
+        }
 
 # --- FUNCIONES DE EXTRACCIÓN ---
 

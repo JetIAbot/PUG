@@ -95,9 +95,35 @@
         }
 
         function populateForm(datos) {
+            console.log('Rellenando formulario con datos:', datos);
+            
             // Ocultar el mensaje de estado y mostrar el formulario
             statusContainer.style.display = 'none';
             reviewForm.style.display = 'block';
+
+            // Verificar si son datos de demostración
+            const esDemostracion = datos.estado_horarios && 
+                (datos.estado_horarios === 'ejemplo_demo' || 
+                 datos.estado_horarios === 'demo_realista' ||
+                 datos.estado_horarios === 'demo');
+
+            // Agregar aviso de demostración si corresponde
+            if (esDemostracion) {
+                const avisoDemo = document.createElement('div');
+                avisoDemo.className = 'card';
+                avisoDemo.style.backgroundColor = '#fff3cd';
+                avisoDemo.style.borderColor = '#ffeaa7';
+                avisoDemo.innerHTML = `
+                    <h2 style="color: #856404;">ℹ️ Modo Demostración</h2>
+                    <p><strong>Los horarios universitarios aún no han sido publicados.</strong></p>
+                    <p>Los datos mostrados a continuación son de demostración para que puedas probar el sistema de matchmaking.</p>
+                    <p>Cuando la universidad publique los horarios reales, el sistema los extraerá automáticamente.</p>
+                `;
+                
+                // Insertar antes del primer card
+                const firstCard = document.getElementById('personal-data-card');
+                firstCard.parentNode.insertBefore(avisoDemo, firstCard);
+            }
 
             // Rellenar datos personales
             const personalCard = document.getElementById('personal-data-card');
@@ -106,33 +132,66 @@
                 <p><strong>Matrícula:</strong> ${p_data.matricola}</p>
                 <p><strong>Nombre:</strong> ${p_data.nome}</p>
                 <p><strong>Apellido:</strong> ${p_data.cognome}</p>
-                <p><strong>Fecha de Nacimiento:</strong> ${p_data.data_nascita}</p>
+                <p><strong>Fecha de Nacimiento:</strong> ${p_data.data_nascita || 'No disponible'}</p>
+                ${p_data.email ? `<p><strong>Email:</strong> ${p_data.email}</p>` : ''}
                 <input type="hidden" name="matricola" value="${p_data.matricola}">
                 <input type="hidden" name="nome" value="${p_data.nome}">
                 <input type="hidden" name="cognome" value="${p_data.cognome}">
-                <input type="hidden" name="data_nascita" value="${p_data.data_nascita}">
+                <input type="hidden" name="data_nascita" value="${p_data.data_nascita || ''}">
             `;
 
             // Rellenar horario
             const scheduleCard = document.getElementById('schedule-card');
+            
+            // Agregar título específico para el tipo de horario
+            let tituloHorario = '<h2>Horario Extraído</h2>';
+            if (esDemostracion) {
+                tituloHorario = '<h2>📅 Horario de Demostración</h2>';
+                scheduleCard.innerHTML = tituloHorario + 
+                    '<p><em>Este es un horario de ejemplo generado automáticamente.</em></p>';
+            } else {
+                scheduleCard.innerHTML = tituloHorario;
+            }
+            
             if (datos.horario && datos.horario.length > 0) {
                 datos.horario.forEach(clase => {
+                    const esDemo = clase.materia && clase.materia.includes('(DEMO)');
+                    const iconoDemo = esDemo ? '🎭 ' : '';
+                    
                     scheduleCard.innerHTML += `
                         <div class="horario-item">
-                            <span><strong>${clase.dia}</strong> - Bloque ${clase.hora}</span>
-                            <span>${clase.info_clase}</span>
+                            <span><strong>${clase.dia}</strong> - Bloque ${clase.hora || clase.bloque}</span>
+                            <span>${iconoDemo}${clase.info_clase || clase.materia} ${clase.profesor ? '- ' + clase.profesor : ''}</span>
                         </div>
                     `;
                 });
+                
+                // Agregar nota adicional si es demostración
+                if (esDemostracion) {
+                    scheduleCard.innerHTML += `
+                        <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+                            <small><strong>Nota:</strong> Este horario será reemplazado automáticamente cuando 
+                            la universidad publique los horarios oficiales.</small>
+                        </div>
+                    `;
+                }
             } else {
                 scheduleCard.innerHTML += '<p class="empty">No se encontraron clases en el horario.</p>';
             }
+            
             // Añadir el horario completo como un campo oculto JSON
             const horarioInput = document.createElement('input');
             horarioInput.type = 'hidden';
             horarioInput.name = 'horario_json';
             horarioInput.value = JSON.stringify(datos.horario);
             scheduleCard.appendChild(horarioInput);
+            
+            // Agregar campo oculto para el estado de los horarios
+            const estadoInput = document.createElement('input');
+            estadoInput.type = 'hidden';
+            estadoInput.name = 'estado_horarios';
+            estadoInput.value = datos.estado_horarios || 'no_disponible';
+            scheduleCard.appendChild(estadoInput);
         }
 
         // Script para mostrar/ocultar los detalles de la licencia

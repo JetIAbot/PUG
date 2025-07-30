@@ -13,6 +13,19 @@ env/
 venv/
 ENV/
 
+# --- SEGURIDAD: Archivos con datos sensibles ---
+*.log
+logs/
+security.log
+audit.log
+credenciales_reales.json
+credenciales.json
+datos_usuario.json
+session_data/
+temp_downloads/
+*.backup
+*.dump
+
 # --- Archivos de configuración de IDE y herramientas locales ---
 .vscode/
 .idea/
@@ -31,14 +44,17 @@ eggs/
 pip-log.txt
 celerybeat-schedule
 celerybeat.pid
-# ¡AÑADIDO! Ignora las capturas de pantalla de error generadas por Selenium.
+
+# --- Archivos temporales de desarrollo ---
 error_screenshot.png
+verificar_*.py
+test_*.temp
+*.tmp
 
-# --- Archivos de credenciales y secretos (¡MUY IMPORTANTE!) ---
-# Ignora el archivo de credenciales de servicio de Firebase.
-credenciales.json
+# --- Cache de herramientas ---
+htmlcov/
+.coverage
+.tox/
 
-# --- ERRORES CORREGIDOS ---
-# El siguiente archivo fue eliminado de esta lista porque es código fuente esencial
-# y DEBE estar en el repositorio:
-# constants.py
+# --- Docker ---
+.dockerignore

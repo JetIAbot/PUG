@@ -1,8 +1,16 @@
-# matchmaking.py (Versión Final con Algoritmo de Matchmaking)
+# matchmaking.py (Versión Final con Algoritmo de Matchmaking y Portal Real)
 
 # --- IMPORTACIONES ---
 import firebase_admin
 from firebase_admin import credentials, firestore
+import os
+from dotenv import load_dotenv
+from portal_connector import UniversityPortalConnector
+from demo_data_generator import DemoDataGenerator, obtener_datos_demo_rapido
+import logging
+
+# Cargar variables de entorno
+load_dotenv()
 
 # --- DICCIONARIOS Y CONSTANTES DE CONFIGURACIÓN ---
 ORDEN_BLOQUES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
@@ -25,6 +33,164 @@ def inicializar_firebase():
             print(f"Error al inicializar Firebase: {e}")
             return None
     return firestore.client()
+
+def extraer_datos_portal_real(matricola: str, password: str) -> dict:
+    """Extraer datos del portal universitario real de forma segura"""
+    logger = logging.getLogger('portal_extraction')
+    
+    # Verificar si está habilitado el uso del portal real
+    if os.getenv('USE_REAL_PORTAL', 'False').lower() != 'true':
+        logger.warning("Portal real no habilitado en configuración")
+        return {
+            'success': False,
+            'message': 'Portal real no habilitado',
+            'data': None
+        }
+    
+    try:
+        logger.info(f"Iniciando extracción de datos para matrícula: {matricola[:2]}****")
+        
+        # Crear conector al portal
+        portal_connector = UniversityPortalConnector()
+        
+        # Conectar y extraer datos
+        result = portal_connector.connect_to_portal(matricola, password)
+        
+        if result['success']:
+            logger.info("Conexión al portal exitosa")
+            
+            # Procesar y estructurar los datos según formato esperado
+            if result['data']:
+                processed_data = procesar_datos_portal(result['data'])
+                result['data'] = processed_data
+                
+                # Información adicional sobre el estado de los datos
+                estado_horarios = processed_data.get('estado_horarios', 'no_disponible')
+                if estado_horarios == 'ejemplo_demo':
+                    result['message'] += ' (usando datos de ejemplo - horarios no publicados aún)'
+                    logger.info("Datos procesados con horarios de ejemplo")
+                elif estado_horarios == 'disponible':
+                    result['message'] += ' (horarios reales extraídos)'
+                    logger.info("Datos procesados con horarios reales")
+                else:
+                    result['message'] += ' (datos básicos extraídos)'
+                    logger.info("Datos básicos procesados")
+            else:
+                # Si no hay datos, crear estructura básica con datos de ejemplo realistas
+                logger.warning("No se pudieron extraer datos específicos, generando datos de demostración")
+                datos_demo = obtener_datos_demo_rapido(matricola)
+                
+                # Usar los datos del perfil extraído si están disponibles
+                if result.get('data') and result['data'].get('student_info'):
+                    student_info = result['data']['student_info']
+                    datos_demo['perfil'].update({
+                        'nome': student_info.get('nome', datos_demo['perfil']['nome']),
+                        'cognome': student_info.get('cognome', datos_demo['perfil']['cognome']),
+                        'matricola': matricola,
+                        'email': student_info.get('email', f'{matricola}@unigre.it')
+                    })
+                
+                result['data'] = datos_demo
+                result['message'] += ' (usando datos de demostración realistas - horarios no publicados)'
+        else:
+            logger.error(f"Error extrayendo datos: {result['errors']}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error durante extracción del portal: {e}")
+        return {
+            'success': False,
+            'message': f'Error técnico: {str(e)}',
+            'data': None,
+            'errors': [str(e)]
+        }
+
+def procesar_datos_portal(raw_data: dict) -> dict:
+    """Procesar datos del portal para formato estándar"""
+    processed = {
+        'perfil': {
+            'nome': '',
+            'cognome': '',
+            'matricola': '',
+            'email': '',
+            'telefono': ''
+        },
+        'horario': [],
+        'materias': [],
+        'calificaciones': [],
+        'estado_horarios': 'no_disponible'  # Nuevo campo para rastrear el estado
+    }
+    
+    # Procesar información del estudiante
+    if 'student_info' in raw_data:
+        student_info = raw_data['student_info']
+        processed['perfil'].update({
+            'nome': student_info.get('nome', 'Usuario'),
+            'cognome': student_info.get('cognome', 'Universitario'),
+            'matricola': student_info.get('matricola', 'No disponible'),
+            'email': student_info.get('email', 'no-disponible@universidad.edu'),
+            'telefono': student_info.get('telefono', 'No disponible')
+        })
+    
+    # Procesar horario
+    if 'schedule' in raw_data and raw_data['schedule']:
+        processed['horario'] = convertir_horario_portal(raw_data['schedule'])
+        processed['estado_horarios'] = 'disponible'
+        logging.getLogger('matchmaking').info(f"Horarios procesados: {len(processed['horario'])} clases")
+    else:
+        # Crear horario de ejemplo para demostración cuando no hay horarios reales
+        processed['horario'] = generar_horario_ejemplo()
+        processed['estado_horarios'] = 'ejemplo_demo'
+        logging.getLogger('matchmaking').warning("Horarios no disponibles - usando datos de ejemplo para demostración")
+    
+    # Procesar materias
+    if 'courses' in raw_data and raw_data['courses']:
+        processed['materias'] = raw_data['courses']
+    else:
+        # Agregar materias de ejemplo basadas en el horario de ejemplo
+        processed['materias'] = generar_materias_ejemplo()
+    
+    # Procesar calificaciones
+    if 'grades' in raw_data:
+        processed['calificaciones'] = raw_data['grades']
+    
+    return processed
+
+def generar_horario_ejemplo() -> list:
+    """Generar horario de ejemplo para demostración cuando no hay horarios reales"""
+    # Usar el generador mejorado
+    generator = DemoDataGenerator()
+    horario_ejemplo = generator.generar_horario_demo(num_materias=5)
+    
+    logging.getLogger('matchmaking').info(f"Generado horario de ejemplo con {len(horario_ejemplo)} clases usando DemoDataGenerator")
+    return horario_ejemplo
+
+def generar_materias_ejemplo() -> list:
+    """Generar materias de ejemplo para demostración"""
+    # Usar el generador mejorado
+    generator = DemoDataGenerator()
+    materias_ejemplo = generator.generar_materias_demo(num_materias=5)
+    
+    logging.getLogger('matchmaking').info(f"Generadas {len(materias_ejemplo)} materias de ejemplo usando DemoDataGenerator")
+    return materias_ejemplo
+
+def convertir_horario_portal(schedule_data: list) -> list:
+    """Convertir horario del portal al formato interno"""
+    horario_convertido = []
+    
+    for clase in schedule_data:
+        # Mapear según la estructura específica del portal
+        clase_convertida = {
+            'materia': clase.get('subject', ''),
+            'profesor': clase.get('professor', ''),
+            'dia': clase.get('day', ''),
+            'bloque': clase.get('time_block', ''),
+            'aula': clase.get('room', '')
+        }
+        horario_convertido.append(clase_convertida)
+    
+    return horario_convertido
 
 def obtener_datos_de_firestore(db: firestore.client):
     """Obtiene los datos de todos los estudiantes y sus horarios desde Firestore."""

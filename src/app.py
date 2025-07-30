@@ -9,8 +9,29 @@ from firebase_admin import credentials, firestore
 from werkzeug.security import check_password_hash
 import logging
 from dotenv import load_dotenv
+import time
+import atexit
+
 # Importar el módulo de matchmaking
-from src import matchmaking
+import matchmaking
+# Importar validadores y logger de seguridad
+from validators import FormValidator, ValidationError
+from logger_config import security_logger
+from log_cleaner import setup_automatic_cleanup
+
+# Cargar variables de entorno
+load_dotenv()
+
+# Configurar limpieza automática de logs al iniciar
+log_cleaner = setup_automatic_cleanup()
+
+# Configurar limpieza al cerrar la aplicación
+def cleanup_on_exit():
+    """Ejecutar limpieza al cerrar la aplicación"""
+    if os.getenv('AUTO_CLEANUP', 'True').lower() == 'true':
+        log_cleaner.clean_old_logs()
+
+atexit.register(cleanup_on_exit)
 
 # --- FÁBRICA DE CELERY ---
 def make_celery(app):
@@ -20,285 +41,456 @@ def make_celery(app):
         broker=app.config['CELERY_BROKER_URL']
     )
     celery.conf.update(app.config)
-
+    
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
             with app.app_context():
                 return self.run(*args, **kwargs)
-
+    
     celery.Task = ContextTask
     return celery
 
+# --- DECORADORES ---
+def login_required(role=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                return redirect(url_for('admin_login'))
+            
+            if role and session.get('user_role') != role:
+                flash('No tienes permisos para acceder a esta página.')
+                return redirect(url_for('admin_login'))
+            
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 # --- FÁBRICA DE LA APLICACIÓN FLASK ---
-def create_app():
-    app = Flask(__name__, template_folder='../templates')
+def create_app(config=None):
+    app = Flask(__name__, template_folder='../templates', static_folder='../static')
+    
+    # Configuración por defecto
     app.config.from_mapping(
         SECRET_KEY=os.getenv('FLASK_SECRET_KEY', 'dev'),
         CELERY_BROKER_URL='redis://localhost:6379/0',
         CELERY_RESULT_BACKEND='redis://localhost:6379/0'
     )
     
-    # Inicializar Firebase dentro de la fábrica
-    try:
-        if not firebase_admin._apps:
-            cred = credentials.Certificate("credenciales.json")
-            firebase_admin.initialize_app(cred)
-        # No asignamos db globalmente, lo manejaremos a través del contexto de la app si es necesario
-    except Exception as e:
-        app.logger.error(f"Error Crítico: No se pudo inicializar Firebase. Error: {e}")
-
-    # Registrar las rutas (blueprints) o adjuntarlas aquí
-    # Por simplicidad, mantendremos las rutas en este archivo por ahora.
-    # Las rutas que usan 'app' ahora usarán 'current_app' o se definirán dentro de la fábrica.
-
-    return app
-
-# --- INICIALIZACIÓN ---
-load_dotenv()
-app = create_app()
-celery_app = make_celery(app)
-db = firestore.client() # Inicializar db después de Firebase
-
-# --- TAREA DE CELERY ---
-# La tarea ahora se define usando la instancia 'celery_app' creada por la fábrica
-@celery_app.task(name='src.app.run_scraping_task')
-def run_scraping_task(matricula, password):
-    """
-    Tarea de Celery que ejecuta el proceso de scraping.
-    """
-    # CORRECCIÓN: Importar la función orquestadora desde main.py.
-    # Se usa un alias para evitar un conflicto de nombres con esta misma función de tarea.
-    from src.main import run_scraping_task as perform_scraping
-
-    # Llamar a la función correcta del módulo correcto.
-    return perform_scraping(matricula, password)
-
-# --- SECCIÓN DE AUTENTICACIÓN Y AUTORIZACIÓN (RESTAURADA) ---
-def login_required(role="Admin"):
-    """Decorador que verifica si un usuario ha iniciado sesión y tiene el rol requerido."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                flash("Debes iniciar sesión para acceder a esta página.", "error")
-                return redirect(url_for('admin_login'))
-            
-            user_role = session.get('user_role')
-            role_hierarchy = {"User": 0, "Admin": 1, "Super Admin": 2, "Alpha Prime": 3}
-
-            if role_hierarchy.get(user_role, 0) < role_hierarchy.get(role, 1):
-                flash("No tienes los permisos necesarios para acceder a esta página.", "error")
-                return redirect(url_for('admin_dashboard'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-# --- RUTAS DE ESTUDIANTE ---
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/extraer-datos', methods=['POST'])
-def extraer_datos():
-    usuario = request.form.get('usuario')
-    contrasena = request.form.get('contrasena')
-
-    if not usuario or not contrasena:
-        flash("El usuario y la contraseña son obligatorios.", "error")
-        return redirect(url_for('index'))
-
-    try:
-        # CORRECCIÓN: Llamar a la tarea de forma asíncrona y redirigir.
-        # Se usa el nombre explícito de la tarea para evitar errores.
-        task = celery_app.send_task('src.app.run_scraping_task', args=[usuario, contrasena])
-        
-        # Guardamos el ID de la tarea en la sesión para poder consultar su estado después.
-        session['task_id'] = task.id
-        
-        # Redirigimos a una página de espera o de revisión.
-        # Asumimos que la página 'revisar' puede manejar la espera.
-        return redirect(url_for('revisar'))
-        
-    except Exception as e:
-        current_app.logger.error(f"Error al iniciar la tarea Celery: {e}")
-        flash(f"Ocurrió un error crítico al procesar tu solicitud: {e}", "error")
-        return redirect(url_for('index'))
-
-# --- NUEVA RUTA DE REVISIÓN Y ESTADO ---
-@app.route('/revisar')
-def revisar():
-    """
-    Muestra la página de espera/revisión. Pasa el ID de la tarea a la plantilla.
-    """
-    task_id = session.get('task_id')
-    if not task_id:
-        flash("No se ha iniciado ninguna tarea de extracción de datos.", "warning")
-        return redirect(url_for('index'))
-    return render_template('revisar.html', task_id=task_id)
-
-@app.route('/task-status/<task_id>')
-def task_status(task_id):
-    """
-    Endpoint de API para consultar el estado de una tarea de Celery.
-    """
-    task = celery_app.AsyncResult(task_id)
+    # Aplicar configuración personalizada si se proporciona
+    if config:
+        app.config.update(config)
     
-    if task.state == 'SUCCESS':
-        # La tarea terminó correctamente. El resultado está en task.result.
-        # El resultado de ejecutar_scraping es un string JSON, lo parseamos.
+    # Inicializar Firebase dentro de la fábrica (solo si no es testing)
+    if not app.config.get('TESTING', False):
         try:
-            # El resultado de la tarea es un string JSON, lo convertimos a un objeto.
-            result_data = json.loads(task.result)
-            # Si el scraping devolvió un error interno, lo tratamos como una falla.
-            if 'error' in result_data:
-                 response = {
-                    'state': 'FAILURE',
-                    'status': result_data['error']
+            if not firebase_admin._apps:
+                cred = credentials.Certificate("credenciales.json")
+                firebase_admin.initialize_app(cred)
+        except Exception as e:
+            app.logger.error(f"Error Crítico: No se pudo inicializar Firebase. Error: {e}")
+    
+    # Variable para la base de datos
+    if not app.config.get('TESTING', False):
+        try:
+            db = firestore.client()
+            app.config['db'] = db
+        except Exception:
+            app.config['db'] = None
+    
+    # --- MIDDLEWARE DE LOGGING ---
+    @app.before_request
+    def log_request():
+        """Log de todas las requests"""
+        request.start_time = time.time()
+        
+        # Log de requests sensibles
+        if request.endpoint in ['extraer_datos', 'admin_login', 'guardar_horario']:
+            security_logger.log_security_event(
+                'request_received',
+                {
+                    'endpoint': request.endpoint,
+                    'method': request.method,
+                    'user_agent': request.headers.get('User-Agent')
+                },
+                session.get('matricola'),
+                request.remote_addr
+            )
+
+    @app.after_request
+    def log_response(response):
+        """Log de responses"""
+        if hasattr(request, 'start_time'):
+            duration = time.time() - request.start_time
+            
+            # Log responses de endpoints críticos
+            if request.endpoint in ['extraer_datos', 'admin_login']:
+                security_logger.log_security_event(
+                    'request_completed',
+                    {
+                        'endpoint': request.endpoint,
+                        'status_code': response.status_code,
+                        'duration_seconds': round(duration, 3)
+                    },
+                    session.get('matricola'),
+                    request.remote_addr
+                )
+        
+        return response
+    
+    # --- RUTAS ---
+    @app.route('/')
+    def index():
+        return render_template('index.html')
+
+    @app.route('/extraer_datos', methods=['POST'])
+    def extraer_datos():
+        try:
+            # Validación de entrada
+            validator = FormValidator()
+            
+            matricola = request.form.get('matricola', '').strip()
+            password = request.form.get('password', '').strip()
+            
+            # Validar datos
+            validation_result = validator.validate_student_form({
+                'matricola': matricola,
+                'password': password
+            })
+            
+            if not validation_result['valid']:
+                security_logger.log_security_event(
+                    'validation_failed',
+                    {'errors': validation_result['errors'], 'matricola': matricola},
+                    matricola,
+                    request.remote_addr
+                )
+                
+                # Crear lista de errores para mostrar al usuario
+                error_messages = []
+                for field, field_errors in validation_result['errors'].items():
+                    if isinstance(field_errors, list):
+                        error_messages.extend(field_errors)
+                    else:
+                        error_messages.append(str(field_errors))
+                
+                return jsonify({
+                    'titulo': 'Error de Validación',
+                    'salida': 'Datos no válidos: ' + ', '.join(error_messages)
+                }), 400
+            
+            # Log intento de extracción
+            security_logger.log_security_event(
+                'data_extraction_attempt',
+                {'matricola': matricola},
+                matricola,
+                request.remote_addr
+            )
+            
+            # Crear tarea de Celery
+            task = extraer_datos_task.delay(matricola, password)
+            
+            security_logger.log_security_event(
+                'data_extraction_task_created',
+                {
+                    'task_id': task.id,
+                    'matricola': matricola
+                },
+                matricola,
+                request.remote_addr
+            )
+            
+            return jsonify({
+                'titulo': 'Procesando...',
+                'salida': f'Procesando datos para {matricola}. ID de tarea: {task.id}',
+                'task_id': task.id
+            })
+            
+        except Exception as e:
+            current_app.logger.error(f"Error en extraer_datos: {e}")
+            security_logger.log_security_event(
+                'extraction_error',
+                {'error': str(e)},
+                request.form.get('matricola'),
+                request.remote_addr
+            )
+            return jsonify({
+                'titulo': 'Error',
+                'salida': 'Error interno del servidor'
+            }), 500
+
+    @app.route('/check_task/<task_id>')
+    def check_task(task_id):
+        try:
+            task = extraer_datos_task.AsyncResult(task_id)
+            
+            if task.state == 'PENDING':
+                response = {
+                    'state': task.state,
+                    'status': 'Tarea pendiente...'
+                }
+            elif task.state == 'SUCCESS':
+                response = {
+                    'state': task.state,
+                    'result': task.result
                 }
             else:
                 response = {
                     'state': task.state,
-                    'result': result_data
+                    'status': str(task.info)
                 }
-        except (json.JSONDecodeError, TypeError):
-             # Esto ocurre si la tarea devuelve algo que no es JSON válido.
-             response = {
-                'state': 'FAILURE',
-                'status': f"Error interno: La tarea devolvió un formato inesperado."
-            }
-
-    elif task.state == 'FAILURE':
-        # La tarea falló. La información del error está en task.info.
-        response = {
-            'state': task.state,
-            'status': str(task.info),  # task.info contiene la excepción.
-        }
-    elif task.state == 'PENDING':
-        # La tarea aún no ha sido recogida por un worker.
-        response = {'state': task.state, 'status': 'Tarea pendiente...'}
-    else:
-        # La tarea está en un estado intermedio (ej. PROGRESS, RETRY).
-        response = {
-            'state': task.state,
-            'status': str(task.info) # Devolvemos la info que haya (ej. 'Procesando...')
-        }
-        
-    return jsonify(response)
-
-
-# --- RUTA DE GUARDADO (RESTAURADA Y CRÍTICA) ---
-@app.route('/guardar_horario', methods=['POST'])
-def guardar_horario():
-    """
-    Recibe los datos del formulario de revisión y los guarda en Firestore.
-    """
-    try:
-        # Extraemos los datos personales del formulario
-        matricola = request.form['matricola']
-        nome = request.form['nome']
-        cognome = request.form['cognome']
-        data_nascita = request.form['data_nascita']
-
-        # El horario viene como un string JSON, lo parseamos
-        horario_json = request.form.get('horario_json')
-        horario = json.loads(horario_json) if horario_json else []
-
-        # --- PROCESO DE LICENCIA MEJORADO Y VALIDADO ---
-        tiene_licencia = request.form.get('tiene_licencia') == 'si'
-        tipo_licencia = request.form.getlist('tipo_licencia') if tiene_licencia else []
-        vencimiento_licencia_str = request.form.get('vencimiento_licencia')
-        
-        vencimiento_licencia_dt = None
-        if tiene_licencia and vencimiento_licencia_str:
-            try:
-                # 1. VALIDACIÓN: Intentamos convertir el texto a un objeto de fecha.
-                # Si el formato es incorrecto (ej. 'hola'), lanzará un error.
-                vencimiento_licencia_dt = datetime.strptime(vencimiento_licencia_str, '%Y-%m-%d')
-            except ValueError:
-                # Si la validación falla, informamos al usuario y detenemos el proceso.
-                flash(f"El formato de la fecha de vencimiento ('{vencimiento_licencia_str}') no es válido. Por favor, usa el formato AAAA-MM-DD.", 'danger')
-                # Lo ideal sería devolver al usuario a la página de revisión con los datos
-                # ya cargados, pero por simplicidad lo redirigimos al inicio.
-                return redirect(url_for('index'))
-
-        # Preparamos el documento para Firestore
-        doc_ref = db.collection('estudiantes').document(matricola)
-        
-        datos_a_guardar = {
-            'nome': nome,
-            'cognome': cognome,
-            'data_nascita': data_nascita,
-            'horario': horario,
-            'tiene_licencia': tiene_licencia,
-            'tipo_licencia': tipo_licencia,
-            # 2. TIPO DE DATO CORRECTO: Guardamos el objeto de fecha (o None).
-            # Firestore lo convertirá automáticamente a un Timestamp.
-            'vencimiento_licencia': vencimiento_licencia_dt,
-            'ultima_actualizacion': firestore.SERVER_TIMESTAMP
-        }
-
-        doc_ref.set(datos_a_guardar, merge=True)
-
-        flash('¡Tus datos y horario se han guardado correctamente!', 'success')
-        return redirect(url_for('index'))
-
-    except Exception as e:
-        logging.error(f"Error al guardar en Firestore: {e}")
-        flash('Hubo un error al intentar guardar tus datos. Por favor, inténtalo de nuevo.', 'danger')
-        return redirect(url_for('index'))
-
-# --- RUTAS DE ADMINISTRADOR (RESTAURADAS Y PROTEGIDAS) ---
-@app.route('/admin/login', methods=['GET', 'POST'])
-def admin_login():
-    if request.method == 'POST':
-        user_id = request.form.get('user_id')
-        password = request.form.get('password')
-        if not user_id or not password:
-            flash("ID y contraseña son obligatorios.", "error")
-            return redirect(url_for('admin_login'))
-        try:
-            user_ref = db.collection('estudiantes').document(user_id).get()
-            if user_ref.exists:
-                user_data = user_ref.to_dict()
-                if user_data.get('password_hash') and check_password_hash(user_data['password_hash'], password):
-                    if user_data.get('rol', 'User') in ["Admin", "Super Admin", "Alpha Prime"]:
-                        session['user_id'] = user_id
-                        session['user_role'] = user_data.get('rol')
-                        session['user_name'] = user_data.get('nome', 'Admin')
-                        return redirect(url_for('admin_dashboard'))
-            flash("Credenciales incorrectas o sin permisos de administrador.", "error")
+            
+            return jsonify(response)
+            
         except Exception as e:
-            flash(f"Error al iniciar sesión: {e}", "error")
-    return render_template('admin_login.html')
+            current_app.logger.error(f"Error verificando tarea {task_id}: {e}")
+            return jsonify({'error': 'Error verificando tarea'}), 500
 
-@app.route('/admin/logout')
-def admin_logout():
-    session.clear()
-    flash("Has cerrado la sesión.", "info")
-    return redirect(url_for('admin_login'))
+    @app.route('/guardar_horario', methods=['POST'])
+    def guardar_horario():
+        try:
+            datos = request.get_json()
+            matricola = datos.get('matricola')
+            horarios = datos.get('horarios', [])
+            
+            # Validar datos
+            validator = FormValidator()
+            errors = validator.validate_schedule_data({
+                'matricola': matricola,
+                'horarios': horarios
+            })
+            
+            if errors:
+                security_logger.log_security_event(
+                    'schedule_validation_failed',
+                    {'errors': errors},
+                    matricola,
+                    request.remote_addr
+                )
+                return jsonify({'error': 'Datos no válidos'}), 400
+            
+            # Obtener referencia a la base de datos
+            db = current_app.config.get('db')
+            if not db:
+                return jsonify({'error': 'Base de datos no disponible'}), 500
+            
+            # Guardar en Firestore
+            doc_ref = db.collection('estudiantes').document(matricola)
+            doc_ref.set({
+                'matricola': matricola,
+                'horarios': horarios,
+                'timestamp': datetime.now()
+            })
+            
+            security_logger.log_security_event(
+                'schedule_saved',
+                {
+                    'matricola': matricola,
+                    'horarios_count': len(horarios)
+                },
+                matricola,
+                request.remote_addr
+            )
+            
+            return jsonify({'status': 'Horario guardado correctamente'})
+            
+        except Exception as e:
+            current_app.logger.error(f"Error guardando horario: {e}")
+            security_logger.log_security_event(
+                'schedule_save_error',
+                {'error': str(e)},
+                request.get_json().get('matricola') if request.get_json() else None,
+                request.remote_addr
+            )
+            return jsonify({'error': 'Error guardando horario'}), 500
 
-@app.route('/admin')
-def admin_redirect():
-    if 'user_id' in session:
-        return redirect(url_for('admin_dashboard'))
-    return redirect(url_for('admin_login'))
+    @app.route('/revisar')
+    def revisar_datos():
+        return render_template('revisar.html')
 
-@app.route('/admin/dashboard')
-@login_required(role="Admin")
-def admin_dashboard():
-    return render_template('admin.html', user_role=session.get('user_role'))
+    @app.route('/admin')
+    def admin():
+        if 'user_id' in session:
+            return redirect(url_for('admin_dashboard'))
+        return redirect(url_for('admin_login'))
 
-@app.route('/ejecutar-matchmaking', methods=['POST'])
-@login_required(role="Admin")
-def ejecutar_matchmaking():
-    try:
-        # MEJORA: Llamar a la función directamente. Es más limpio y eficiente.
-        resultado_str = matchmaking.realizar_matchmaking()
-        return jsonify(titulo="Resultado del Matchmaking", salida=resultado_str)
-    except Exception as e:
-        current_app.logger.error(f"Error ejecutando matchmaking: {e}")
-        return jsonify(titulo="Error inesperado", salida=str(e)), 500
+    @app.route('/admin/login', methods=['GET', 'POST'])
+    def admin_login():
+        if request.method == 'POST':
+            try:
+                matricola = request.form.get('matricola', '').strip()
+                password = request.form.get('password', '').strip()
+                
+                # Validar entrada
+                validator = FormValidator()
+                errors = validator.validate_admin_login({
+                    'matricola': matricola,
+                    'password': password
+                })
+                
+                if errors:
+                    security_logger.log_security_event(
+                        'admin_login_validation_failed',
+                        {'errors': errors},
+                        matricola,
+                        request.remote_addr
+                    )
+                    flash('Datos no válidos')
+                    return render_template('admin_login.html')
+                
+                # Log intento de login
+                security_logger.log_security_event(
+                    'admin_login_attempt',
+                    {'matricola': matricola},
+                    matricola,
+                    request.remote_addr
+                )
+                
+                # Verificar credenciales (simulado)
+                with open('credenciales.json', 'r') as f:
+                    credenciales = json.load(f)
+                
+                stored_password = credenciales.get('admin_password')
+                if matricola == 'admin' and stored_password and check_password_hash(stored_password, password):
+                    session['user_id'] = matricola
+                    session['user_role'] = 'Admin'
+                    
+                    security_logger.log_security_event(
+                        'admin_login_success',
+                        {'matricola': matricola},
+                        matricola,
+                        request.remote_addr
+                    )
+                    
+                    flash('Login exitoso')
+                    return redirect(url_for('admin_dashboard'))
+                else:
+                    security_logger.log_security_event(
+                        'admin_login_failed',
+                        {'matricola': matricola, 'reason': 'invalid_credentials'},
+                        matricola,
+                        request.remote_addr
+                    )
+                    flash('Credenciales inválidas')
+                    
+            except Exception as e:
+                current_app.logger.error(f"Error en login de admin: {e}")
+                security_logger.log_security_event(
+                    'admin_login_error',
+                    {'error': str(e)},
+                    request.form.get('matricola'),
+                    request.remote_addr
+                )
+                flash('Error interno del servidor')
+        
+        return render_template('admin_login.html')
+
+    @app.route('/admin/dashboard')
+    @login_required(role="Admin")
+    def admin_dashboard():
+        return render_template('admin.html', user_role=session.get('user_role'))
+
+    @app.route('/ejecutar-matchmaking', methods=['POST'])
+    @login_required(role="Admin")
+    def ejecutar_matchmaking():
+        try:
+            resultado_str = matchmaking.realizar_matchmaking()
+            return jsonify(titulo="Resultado del Matchmaking", salida=resultado_str)
+        except Exception as e:
+            current_app.logger.error(f"Error ejecutando matchmaking: {e}")
+            return jsonify(titulo="Error inesperado", salida=str(e)), 500
+
+    # --- RUTAS DE API PARA VALIDACIÓN ---
+    @app.route('/api/validate', methods=['POST'])
+    def validate_form():
+        """Endpoint para validación en tiempo real"""
+        try:
+            data = request.get_json()
+            validator = FormValidator()
+            
+            if data.get('type') == 'matricola':
+                errors = validator.validate_matricola(data.get('value', ''))
+            elif data.get('type') == 'password':
+                errors = validator.validate_password(data.get('value', ''))
+            elif data.get('type') == 'form':
+                errors = validator.validate_student_form(data.get('data', {}))
+            else:
+                return jsonify({'valid': False, 'errors': ['Tipo de validación no válido']}), 400
+            
+            return jsonify({
+                'valid': len(errors) == 0,
+                'errors': errors
+            })
+            
+        except Exception as e:
+            current_app.logger.error(f"Error en validación: {e}")
+            return jsonify({'valid': False, 'errors': ['Error interno']}), 500
+
+    return app
+
+# --- TAREAS DE CELERY ---
+# Se inicializarán solo cuando se cree la aplicación
+extraer_datos_task = None
+
+def init_celery_tasks(celery_app):
+    """Inicializar las tareas de Celery"""
+    global extraer_datos_task
+    
+    @celery_app.task
+    def extraer_datos_task_impl(matricola, password):
+        try:
+            # Verificar si se debe usar el portal real
+            use_real_portal = os.getenv('USE_REAL_PORTAL', 'False').lower() == 'true'
+            
+            if use_real_portal:
+                # Usar el conector del portal real
+                from matchmaking import extraer_datos_portal_real
+                resultado = extraer_datos_portal_real(matricola, password)
+                
+                if resultado['success']:
+                    # Si la extracción del portal fue exitosa, procesar con matchmaking
+                    from main import procesar_datos_extraidos
+                    datos_procesados = procesar_datos_extraidos(resultado['data'], matricola)
+                    return datos_procesados
+                else:
+                    # Si falló la extracción del portal, devolver el error
+                    return {
+                        'success': False,
+                        'message': resultado['message'],
+                        'errors': resultado.get('errors', [])
+                    }
+            else:
+                # Usar el método original (main.py)
+                from main import extraer_datos_estudiante
+                resultado = extraer_datos_estudiante(matricola, password)
+                return resultado
+                
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f"Error técnico durante extracción: {str(e)}",
+                'errors': [str(e)]
+            }
+    
+    extraer_datos_task = extraer_datos_task_impl
+
+# --- INICIALIZACIÓN GLOBAL ---
+app = None
+celery_app = None
+
+def initialize_app():
+    """Inicializar la aplicación y sus servicios"""
+    global app, celery_app, extraer_datos_task
+    
+    if app is None:
+        load_dotenv()
+        app = create_app()
+        celery_app = make_celery(app)
+        
+        # Inicializar tareas de Celery
+        init_celery_tasks(celery_app)
 
 # --- PUNTO DE ENTRADA ---
 if __name__ == '__main__':
+    initialize_app()
     app.run(host='0.0.0.0', port=5000, debug=True)
