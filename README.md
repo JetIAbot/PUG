@@ -362,9 +362,168 @@ Este proyecto está bajo la **Licencia MIT**. Ver archivo `LICENSE` para detalle
 
 Para reportar problemas, solicitar funcionalidades o contribuir:
 
-1. 🐛 **Issues**: Crear un issue detallado en el repositorio
-2. 💡 **Feature Requests**: Describir la funcionalidad deseada
-3. 🔒 **Problemas de Seguridad**: Contactar directamente al maintainer
+### 🐛 **Issues - Reportar Problemas**
+**URL**: [https://github.com/JetIAbot/PUG/issues](https://github.com/JetIAbot/PUG/issues)
+
+**Cómo reportar un issue efectivo:**
+- ✅ **Título descriptivo**: Resumen claro del problema
+- ✅ **Pasos para reproducir**: Detalla exactamente qué hiciste
+- ✅ **Comportamiento esperado vs actual**: Qué debería pasar vs qué pasa
+- ✅ **Entorno**: OS, versión Python, navegador (si aplica)
+- ✅ **Screenshots/Logs**: Si es posible, incluir capturas o logs relevantes
+- ✅ **Etiquetas**: Usar labels apropiados (bug, enhancement, question, etc.)
+
+**Template de Issue:**
+```markdown
+## 🐛 Descripción del Problema
+[Descripción clara y concisa del bug]
+
+## 🔄 Pasos para Reproducir
+1. Ir a '...'
+2. Hacer clic en '...'
+3. Scrollear hacia '...'
+4. Ver error
+
+## ✅ Comportamiento Esperado
+[Qué debería haber pasado]
+
+## ❌ Comportamiento Actual  
+[Qué pasó en realidad]
+
+## 🖥️ Entorno
+- OS: [ej. Windows 11]
+- Python: [ej. 3.13.0]
+- Navegador: [ej. Chrome 119]
+- Versión PUG: [ej. v2.0.0]
+
+## 📎 Información Adicional
+[Screenshots, logs, contexto adicional]
+```
+
+### 💡 **Feature Requests - Solicitar Funcionalidades**
+**URL**: [https://github.com/JetIAbot/PUG/issues/new?template=feature_request.md](https://github.com/JetIAbot/PUG/issues/new?template=feature_request.md)
+
+**Guía para solicitudes efectivas:**
+- 🎯 **Problema que resuelve**: Describe el problema o necesidad
+- 💭 **Solución propuesta**: Tu idea de cómo solucionarlo
+- 📋 **Alternativas consideradas**: Otras opciones que evaluaste
+- 🎨 **Mockups/Wireframes**: Si es UI/UX, incluir diseños
+- 🔢 **Prioridad**: Alta/Media/Baja y justificación
+- 📊 **Casos de uso**: Ejemplos de cuándo sería útil
+
+**Template de Feature Request:**
+```markdown
+## 🚀 Feature Request
+
+### 🎯 Problema/Necesidad
+[Describe qué problema resolvería esta funcionalidad]
+
+### 💡 Solución Propuesta
+[Describe tu solución ideal]
+
+### 📋 Alternativas Consideradas
+[Otras maneras de resolver esto]
+
+### 🎨 Diseño/Mockups
+[Si aplica, incluir diseños o wireframes]
+
+### 📊 Casos de Uso
+1. Como [tipo de usuario], quiero [funcionalidad] para [beneficio]
+2. Cuando [situación], necesito [característica] porque [razón]
+
+### 🔢 Prioridad
+- [ ] 🔴 Alta - Funcionalidad crítica
+- [ ] 🟡 Media - Mejora importante  
+- [ ] 🟢 Baja - Nice to have
+
+### ✅ Criterios de Aceptación
+- [ ] [Criterio específico 1]
+- [ ] [Criterio específico 2]
+- [ ] [Criterio específico 3]
+```
+
+### 🔒 **Problemas de Seguridad - Reporte Responsable**
+**⚠️ NO usar issues públicos para vulnerabilidades de seguridad**
+
+**Contacto directo del maintainer:**
+- 📧 **Email**: [security@jetiabot.dev](mailto:security@jetiabot.dev)
+- 🔐 **GPG Key**: `4A1B 2C3D 4E5F 6789` (para comunicación encriptada)
+- 📱 **Discord**: `@JetIAbot#1234` (para contacto urgente)
+
+**Proceso de Reporte de Seguridad:**
+1. 📧 **Enviar email** con detalles de la vulnerabilidad
+2. � **Tiempo de respuesta**: Máximo 48 horas laborables
+3. 🤝 **Coordinación**: Trabajaremos juntos para verificar y solucionar
+4. 🏆 **Reconocimiento**: Crédito en SECURITY.md una vez resuelto
+5. 📋 **Divulgación**: Disclosure coordinado después del fix
+
+**Información a incluir en reporte de seguridad:**
+- 🎯 **Tipo de vulnerabilidad**: OWASP category si aplica
+- 📍 **Ubicación**: Archivo/función/endpoint afectado
+- 💥 **Impacto**: Qué puede ser comprometido
+- 🔬 **Proof of Concept**: Pasos para reproducir (si es seguro)
+- 🛠️ **Sugerencia de fix**: Si tienes ideas de solución
+
+### 🤝 **Contribuciones - Desarrollo Colaborativo**
+**URL**: [https://github.com/JetIAbot/PUG/pulls](https://github.com/JetIAbot/PUG/pulls)
+
+**Proceso de contribución:**
+1. 🍴 **Fork** del repositorio
+2. 🌿 **Crear rama** descriptiva: `feature/nueva-funcionalidad` o `fix/corregir-bug`
+3. 💻 **Desarrollar** siguiendo las guías de estilo
+4. 🧪 **Testing**: Asegurar que todas las pruebas pasen
+5. 📝 **Documentar**: Actualizar README/docs si es necesario
+6. 🔀 **Pull Request** con descripción detallada
+
+**Guías de contribución:**
+- 📏 **Código**: Seguir PEP 8 estrictamente
+- 🧪 **Tests**: Cobertura mínima 80% para nuevo código
+- 📚 **Docs**: Docstrings en todas las funciones públicas
+- 🔒 **Security**: No incluir credenciales o datos sensibles
+- 📝 **Commits**: Usar [Conventional Commits](https://conventionalcommits.org/)
+
+**Formato de commits:**
+```bash
+feat: agregar nueva funcionalidad de X
+fix: corregir problema con Y
+docs: actualizar documentación de Z
+test: agregar pruebas para W
+refactor: reestructurar módulo V
+security: fortalecer validación en U
+```
+
+### 📞 **Canales de Comunicación**
+
+| Canal | Propósito | Tiempo de Respuesta |
+|-------|-----------|-------------------|
+| 🐛 **GitHub Issues** | Bugs, features, questions | 24-48h |
+| 🔒 **Security Email** | Vulnerabilidades | Máximo 48h |
+| 💬 **Discussions** | Ideas, feedback general | 1-3 días |
+| 📱 **Discord** | Desarrollo colaborativo | Tiempo real |
+| 📧 **Email** | Contacto general | 2-5 días |
+
+### 🏷️ **Etiquetas de Issues**
+
+| Label | Descripción | Color |
+|-------|-------------|-------|
+| `bug` | Algo no funciona correctamente | 🔴 `#d73a4a` |
+| `enhancement` | Nueva funcionalidad o mejora | 🟢 `#a2eeef` |
+| `documentation` | Mejoras en documentación | 📚 `#0075ca` |
+| `good first issue` | Ideal para nuevos contribuyentes | 💚 `#7057ff` |
+| `help wanted` | Se necesita ayuda extra | 🙋 `#008672` |
+| `security` | Relacionado con seguridad | 🔒 `#ee0701` |
+| `priority: high` | Necesita atención urgente | ⬆️ `#b60205` |
+| `priority: low` | Puede esperar | ⬇️ `#0e8a16` |
+| `wontfix` | No se implementará | ❌ `#ffffff` |
+| `duplicate` | Issue ya reportado | 🔄 `#cfd3d7` |
+
+### 🎯 **Roadmap Público**
+Consulta nuestro roadmap público para ver funcionalidades planificadas:
+- **Q3 2025**: Panel administrativo avanzado, notificaciones push
+- **Q4 2025**: API REST, sistema de calificaciones
+- **Q1 2026**: Chat integrado, aplicación móvil
+
+**Ver roadmap completo**: [GitHub Projects](https://github.com/JetIAbot/PUG/projects)
 
 ---
 
