@@ -34,6 +34,7 @@ PUG/
 ├── docker-compose.yml         # 🐳 Orquestación Docker
 ├── Dockerfile                 # 🐳 Imagen Docker
 ├── .gitignore                 # 🔒 Protección datos personales
+├── README.md                  # 📖 Documentación principal
 │
 ├── core/                      # 🧠 Lógica de negocio principal
 │   ├── __init__.py
@@ -61,6 +62,13 @@ PUG/
 │   ├── css/validation.css     # 🎨 Estilos de validación
 │   ├── js/validation.js       # ⚡ JavaScript de validación
 │   └── uploads/               # 📤 Archivos subidos
+│
+├── docs/                      # 📚 Documentación técnica
+│   ├── README.md             # 📋 Índice de documentación
+│   ├── PORTAL_REAL_GUIDE.md  # 🌐 Guía técnica del portal
+│   ├── RESTRUCTURACION_COMPLETADA.md # 🔄 Log de reestructuración
+│   ├── SESION_COMPLETADA.md  # ✅ Resumen de sesión de trabajo
+│   └── test_credentials.md   # 🧪 Documentación de testing
 │
 ├── logs/                      # 📝 Sistema de logs
 │   ├── app.log               # 📊 Log principal
