@@ -82,9 +82,13 @@ PUG/
 │   └── test_app.py           # 🧪 Tests principales
 │
 ├── scripts/                   # 🔧 Scripts de utilidades
-│   ├── test_restructuracion.py  # ✅ Validación reestructuración
-│   ├── analyze_logs.py          # 📊 Análisis de logs
-│   └── security_check.py        # 🔒 Verificación seguridad
+│   ├── analyze_logs.py        # 📊 Análisis de logs del sistema
+│   ├── security_check.py      # 🔒 Verificación de seguridad
+│   ├── test_chrome.py         # 🌐 Test de ChromeDriver
+│   ├── test_demo_system.py    # 🎭 Test del sistema de demostración
+│   ├── test_portal.py         # 🌐 Test de conexión al portal
+│   ├── test_restructuración.py # ✅ Validación de reestructuración
+│   └── test_simple.py         # 🧪 Pruebas básicas del sistema
 │
 └── temp_downloads/            # 📥 Descargas temporales (ignorado en git)
 ```
