@@ -1,60 +1,137 @@
-# --- Archivos de Python compilados y de caché ---
+# ========================================
+# .gitignore para PUG - Portal University Grouper
+# Protección de datos personales y archivos sensibles
+# ========================================
+
+# --- CRÍTICO: Archivos con datos sensibles y personales ---
+credenciales*.json
+*credentials*.json
+*.pem
+*.p12
+*.key
+*.crt
+service-account*.json
+firebase-adminsdk*.json
+
+# --- Logs y archivos de sesión (pueden contener datos personales) ---
+logs/
+*.log
+*.log.*
+session_data/
+temp_downloads/
+uploads/
+temp_uploads/
+*.backup
+*.dump
+*.sqlite
+*.db
+
+# --- Variables de entorno con secrets ---
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+config.local.py
+secrets.json
+
+# --- Archivos temporales y de desarrollo ---
+test_*.temp
+verificar_*.py
+error_screenshot.png
+screenshot_*.png
+debug_*.html
+*.tmp
+*.temp
+
+# --- Python: archivos compilados y de caché ---
 __pycache__/
 *.py[cod]
 *$py.class
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+*.so
 
 # --- Entornos Virtuales ---
-.env
-.venv
-env/
+.venv/
 venv/
+env/
 ENV/
+.virtualenv/
 
-# --- SEGURIDAD: Archivos con datos sensibles ---
-*.log
-logs/
-security.log
-audit.log
-credenciales_reales.json
-credenciales.json
-datos_usuario.json
-session_data/
-temp_downloads/
-*.backup
-*.dump
-
-# --- Archivos de configuración de IDE y herramientas locales ---
+# --- IDEs y editores ---
 .vscode/
 .idea/
-.spyderproject
-.ropeproject
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
-# --- Archivos de distribución y empaquetado ---
+# --- Distribución y empaquetado ---
 build/
 dist/
 eggs/
 *.egg-info/
 *.egg
+MANIFEST
 
-# --- Archivos de registro y salida ---
-*.log
-pip-log.txt
-celerybeat-schedule
-celerybeat.pid
-
-# --- Archivos temporales de desarrollo ---
-error_screenshot.png
-verificar_*.py
-test_*.temp
-*.tmp
-
-# --- Cache de herramientas ---
+# --- Herramientas de desarrollo ---
 htmlcov/
 .coverage
+.coverage.*
 .tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# --- Jupyter Notebooks (pueden contener datos sensibles) ---
+.ipynb_checkpoints
+*.ipynb
 
 # --- Docker ---
 .dockerignore
+docker-compose.override.yml
+
+# --- Celery ---
+celerybeat-schedule
+celerybeat.pid
+
+# --- Archivos específicos del sistema ---
+.pyc
+.pyo
+.pyd
+.python-version
+
+# --- Datos de prueba que puedan contener información real ---
+test_data/
+sample_data/
+mock_data/
+datos_estudiantes.json
+horarios_reales.json
+
+# --- Chrome WebDriver y Selenium ---
+chromedriver
+chromedriver.exe
+geckodriver
+geckodriver.exe
+*.har
+
+# ========================================
+# IMPORTANTE: Archivos permitidos para el repositorio
+# ========================================
+# Los siguientes archivos SÍ deben incluirse:
+# - app.py
+# - config.py (sin secrets)
+# - core/*.py
+# - utils/*.py 
+# - templates/*.html
+# - static/*.css, *.js
+# - requirements.txt
+# - README.md
+# - RESTRUCTURACION_COMPLETADA.md
+# ========================================

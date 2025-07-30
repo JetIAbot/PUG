@@ -259,3 +259,16 @@ class FormValidator:
             errors.append('La contraseña es obligatoria')
             
         return errors
+
+# Funciones de conveniencia con nombres en español
+def validar_matricola(matricola: str) -> Dict[str, any]:
+    """Función de conveniencia para validar matrícula"""
+    return DataValidator.validate_matricola(matricola)
+
+def validar_email(email: str) -> Dict[str, any]:
+    """Función de conveniencia para validar email"""
+    return DataValidator.validate_email(email)
+
+def validar_contraseña(password: str) -> Dict[str, any]:
+    """Función de conveniencia para validar contraseña"""
+    return DataValidator.validate_password(password)

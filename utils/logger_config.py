@@ -187,5 +187,27 @@ class SecurityLogger:
         
         self.error_logger.error(json.dumps(error_data))
 
+def setup_logging(log_level: str = 'INFO', log_dir: str = 'logs'):
+    """
+    Configurar logging básico para la aplicación
+    
+    Args:
+        log_level: Nivel de logging (DEBUG, INFO, WARNING, ERROR)
+        log_dir: Directorio para archivos de log
+    """
+    # Configurar logging básico
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    
+    logging.basicConfig(
+        level=numeric_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join(log_dir, 'app.log'))
+        ]
+    )
+    
+    return logging.getLogger(__name__)
+
 # Instancia global del logger
 security_logger = SecurityLogger()
