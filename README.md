@@ -1,6 +1,6 @@
 # 🚗 PUG - Portal Universitario de Grupo de Viaje
 
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg) ![Flask](https://img.shields.io/badge/Flask-2.x-black.svg) ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange.svg) ![Selenium](https://img.shields.io/badge/Selenium-4.x-yellow.svg) ![Security](https://img.shields.io/badge/Security-Verified-green.svg) ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg) ![Flask](https://img.shields.io/badge/Flask-2.x-black.svg) ![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange.svg) ![Selenium](https://img.shields.io/badge/Selenium-4.x-yellow.svg) ![Security](https://img.shields.io/badge/Security-Verified-green.svg) ![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg) ![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)
 
 ## 📋 Descripción
 
@@ -281,7 +281,9 @@ refactor: refactorización de código
 
 ## 📄 Licencia
 
-Este proyecto está licenciado bajo la **MIT License** - ver el archivo [LICENSE](LICENSE) para detalles.
+Este proyecto está licenciado bajo la **GNU AFFERO GENERAL PUBLIC LICENSE v3** - ver el archivo [LICENSE](LICENSE) para detalles.
+
+Esta licencia garantiza que cualquier uso de este software, incluso a través de servicios web, debe mantener el código fuente abierto y disponible bajo la misma licencia.
 
 ## 🙏 Agradecimientos
 
