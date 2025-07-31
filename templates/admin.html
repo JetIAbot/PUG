@@ -3,12 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <title>Panel de Administrador</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f6f9; color: #333; }
         .header { background-color: #fff; padding: 15px 30px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { margin: 0; color: #007bff; }
         .header .user-info a { color: #dc3545; text-decoration: none; font-weight: bold; }
-        .container { max-width: 800px; margin: 40px auto; padding: 30px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .container { max-width: 1200px; margin: 40px auto; padding: 30px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        
+        /* Navegación del Panel */
+        .admin-nav {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .nav-item {
+            display: block;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+        }
+        .nav-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+            color: white;
+            text-decoration: none;
+        }
+        .nav-item i {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+        .nav-item span {
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        .nav-item small {
+            opacity: 0.9;
+            font-size: 0.85rem;
+        }
+        
+        /* Resto de estilos */
         p { line-height: 1.6; }
         button { font-size: 1.1em; padding: 12px 25px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; transition: background-color 0.2s; }
         button:hover { background-color: #0056b3; }
@@ -22,12 +64,46 @@
     <div class="header">
         <h1>Panel de Control</h1>
         <div class="user-info">
-            <span>Bienvenido, <strong>{{ session.user_name }}</strong> ({{ session.user_role }})</span> | 
+            <span>Bienvenido, <strong>{{ session.get('admin_username', 'Administrador') }}</strong> (Administrador)</span> | 
             <a href="{{ url_for('admin_logout') }}">Cerrar Sesión</a>
         </div>
     </div>
 
     <div class="container">
+        <!-- Navegación del Panel -->
+        <div class="admin-nav">
+            <a href="{{ url_for('admin_carros') }}" class="nav-item">
+                <i class="fas fa-car"></i>
+                <span>Gestión de Carros</span>
+                <small>Administrar vehículos</small>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-users"></i>
+                <span>Estudiantes</span>
+                <small>Gestionar estudiantes</small>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-route"></i>
+                <span>Viajes</span>
+                <small>Planificar viajes</small>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-list"></i>
+                <span>Listas Diarias</span>
+                <small>Generar listas</small>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-chart-bar"></i>
+                <span>Reportes</span>
+                <small>Estadísticas</small>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-cog"></i>
+                <span>Configuración</span>
+                <small>Ajustes del sistema</small>
+            </a>
+        </div>
+
         <h2>Matchmaking de Viajes</h2>
         <p>
             Haz clic en el botón para ejecutar el algoritmo de matchmaking. El sistema analizará

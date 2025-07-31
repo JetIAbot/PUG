@@ -14,18 +14,56 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .main-container { 
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.98); /* Más opaco para mejor contraste */
             backdrop-filter: blur(10px);
             border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15); /* Sombra más pronunciada */
             margin-top: 5vh;
+            border: 1px solid rgba(255,255,255,0.2); /* Borde sutil */
         }
         .brand-title {
             background: linear-gradient(135deg, #667eea, #764ba2);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
+            color: #2c3e50; /* Fallback para navegadores que no soportan background-clip */
             font-weight: 700;
             margin-bottom: 2rem;
+        }
+        
+        /* Asegurar que el título sea visible */
+        @supports not (-webkit-background-clip: text) {
+            .brand-title {
+                color: #2c3e50 !important;
+                background: none !important;
+            }
+        }
+        
+        /* Mejorar visibilidad de labels */
+        .form-label {
+            color: #2c3e50 !important;
+            font-weight: 700 !important;
+            font-size: 1.1rem !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            display: block !important;
+            background-color: rgba(255,255,255,0.8) !important;
+            padding: 0.25rem 0.5rem !important;
+            border-radius: 0.25rem !important;
+            margin-bottom: 0.75rem !important;
+        }
+        
+        /* Estilos específicos para el texto del label */
+        .label-text {
+            color: #2c3e50 !important;
+            font-weight: 700 !important;
+            font-size: 1.1rem !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+            display: inline !important;
+        }
+        
+        .form-label i {
+            color: #667eea !important;
+            margin-right: 0.5rem;
         }
     </style>
 </head>
@@ -40,6 +78,12 @@
                             PUG Carpooling
                         </h1>
                         <p class="text-muted">Actualiza tu horario académico para encontrar compañeros de viaje</p>
+                        
+                        <!-- Información visual mejorada -->
+                        <div class="alert alert-primary" role="alert">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Portal de Estudiantes</strong> - Ingresa tus credenciales universitarias
+                        </div>
                     </div>
                     
                     <!-- Mensajes Flash Mejorados -->
@@ -60,7 +104,7 @@
                         <div class="form-group mb-4">
                             <label for="matricola" class="form-label required">
                                 <i class="fas fa-id-card"></i>
-                                Número de Matrícula
+                                <span class="label-text">Número de Matrícula</span>
                             </label>
                             <input 
                                 type="text" 
@@ -82,7 +126,8 @@
                         <div class="form-group mb-4">
                             <label for="password" class="form-label required">
                                 <i class="fas fa-lock"></i>
-                                Contraseña
+                                <span class="label-text">Contraseña</span>
+                            </label>
                             </label>
                             <input 
                                 type="password" 
@@ -124,6 +169,13 @@
                             <i class="fas fa-lock"></i>
                             Tus datos están protegidos con cifrado de extremo a extremo
                         </small>
+                    </div>
+                    
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('admin_login') }}" class="btn btn-outline-dark btn-sm">
+                            <i class="fas fa-user-shield"></i>
+                            Acceso Administradores
+                        </a>
                     </div>
                 </div>
             </div>

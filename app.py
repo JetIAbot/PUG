@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 from core.student_scheduler import StudentScheduler
 from core.data_processor import DataProcessor
 from core.firebase_manager import FirebaseManager
+from core.car_manager import CarManager
+from core.models import TipoCarro, TipoCombustible, EstadoCarro, TipoLicencia
 from utils.validators import FormValidator, ValidationError
 from utils.logger_config import security_logger, setup_logging
 from utils.log_cleaner import setup_automatic_cleanup
@@ -81,6 +83,7 @@ def create_app(config_name='default'):
     scheduler = StudentScheduler()
     data_processor = DataProcessor()
     firebase_manager = FirebaseManager()
+    car_manager = CarManager()
     
     # Decorador de autenticación
     def admin_required(f):
@@ -241,11 +244,11 @@ def create_app(config_name='default'):
                 if verificar_credenciales_admin(username, password):
                     session['admin_logged_in'] = True
                     session['admin_username'] = username
-                    security_logger.info(f"Login admin exitoso: {username}")
+                    logger.info(f"Login admin exitoso: {username}")
                     flash('Login exitoso', 'success')
                     return redirect(url_for('admin_dashboard'))
                 else:
-                    security_logger.warning(f"Login admin fallido: {username}")
+                    logger.warning(f"Login admin fallido: {username}")
                     flash('Credenciales incorrectas', 'error')
                     
             except Exception as e:
@@ -276,12 +279,11 @@ def create_app(config_name='default'):
             return render_template('admin.html', estadisticas={})
     
     @app.route('/admin/logout')
-    @admin_required
     def admin_logout():
         """Logout de administrador"""
         username = session.get('admin_username', 'unknown')
         session.clear()
-        security_logger.info(f"Logout admin: {username}")
+        logger.info(f"Logout admin: {username}")
         flash('Sesión cerrada exitosamente', 'info')
         return redirect(url_for('index'))
     
@@ -347,6 +349,179 @@ def create_app(config_name='default'):
         except Exception as e:
             logger.error(f"Error verificando credenciales: {e}")
             return False
+    
+    # =================== RUTAS DE GESTIÓN DE CARROS ===================
+    
+    @app.route('/admin/carros')
+    @admin_required
+    def admin_carros():
+        """Panel de gestión de carros"""
+        try:
+            # Obtener filtros de la URL
+            filtro_estado = request.args.get('estado')
+            filtro_tipo = request.args.get('tipo')
+            
+            # Construir filtros
+            filtros = {}
+            if filtro_estado:
+                filtros['estado'] = filtro_estado
+            if filtro_tipo:
+                filtros['tipo_carro'] = filtro_tipo
+            
+            # Obtener carros
+            carros = car_manager.obtener_todos_carros(filtros)
+            estadisticas = car_manager.obtener_estadisticas()
+            
+            return render_template('admin/carros.html',
+                                 carros=carros,
+                                 estadisticas=estadisticas,
+                                 tipos_carro=TipoCarro,
+                                 tipos_combustible=TipoCombustible,
+                                 estados_carro=EstadoCarro,
+                                 filtros=filtros)
+                                 
+        except Exception as e:
+            logger.error(f"Error en panel de carros: {e}")
+            flash('Error cargando panel de carros', 'error')
+            return redirect(url_for('admin_dashboard'))
+    
+    @app.route('/admin/carros/nuevo', methods=['GET', 'POST'])
+    @admin_required
+    def admin_carros_nuevo():
+        """Crear nuevo carro"""
+        if request.method == 'POST':
+            try:
+                datos_carro = {
+                    'marca': request.form.get('marca', '').strip(),
+                    'modelo': request.form.get('modelo', '').strip(),
+                    'año': request.form.get('año', '').strip(),
+                    'placa': request.form.get('placa', '').strip(),
+                    'tipo_carro': request.form.get('tipo_carro'),
+                    'tipo_combustible': request.form.get('tipo_combustible'),
+                    'capacidad_pasajeros': request.form.get('capacidad_pasajeros', '').strip(),
+                    'observaciones': request.form.get('observaciones', '').strip()
+                }
+                
+                resultado = car_manager.crear_carro(datos_carro)
+                
+                if resultado['success']:
+                    flash(f'Carro creado exitosamente: {datos_carro["marca"]} {datos_carro["modelo"]}', 'success')
+                    return redirect(url_for('admin_carros'))
+                else:
+                    flash(f'Error creando carro: {resultado["message"]}', 'error')
+                    
+            except Exception as e:
+                logger.error(f"Error creando carro: {e}")
+                flash('Error técnico creando carro', 'error')
+        
+        return render_template('admin/carros_form.html',
+                             tipos_carro=TipoCarro,
+                             tipos_combustible=TipoCombustible,
+                             accion='crear')
+    
+    @app.route('/admin/carros/<id_carro>/editar', methods=['GET', 'POST'])
+    @admin_required
+    def admin_carros_editar(id_carro):
+        """Editar carro existente"""
+        carro = car_manager.obtener_carro(id_carro)
+        if not carro:
+            flash('Carro no encontrado', 'error')
+            return redirect(url_for('admin_carros'))
+        
+        if request.method == 'POST':
+            try:
+                datos_actualizacion = {
+                    'marca': request.form.get('marca', '').strip(),
+                    'modelo': request.form.get('modelo', '').strip(),
+                    'año': request.form.get('año', '').strip(),
+                    'placa': request.form.get('placa', '').strip(),
+                    'tipo_carro': request.form.get('tipo_carro'),
+                    'tipo_combustible': request.form.get('tipo_combustible'),
+                    'capacidad_pasajeros': request.form.get('capacidad_pasajeros', '').strip(),
+                    'estado': request.form.get('estado'),
+                    'observaciones': request.form.get('observaciones', '').strip()
+                }
+                
+                resultado = car_manager.actualizar_carro(id_carro, datos_actualizacion)
+                
+                if resultado['success']:
+                    flash(f'Carro actualizado exitosamente', 'success')
+                    return redirect(url_for('admin_carros'))
+                else:
+                    flash(f'Error actualizando carro: {resultado["message"]}', 'error')
+                    
+            except Exception as e:
+                logger.error(f"Error actualizando carro: {e}")
+                flash('Error técnico actualizando carro', 'error')
+        
+        return render_template('admin/carros_form.html',
+                             carro=carro,
+                             tipos_carro=TipoCarro,
+                             tipos_combustible=TipoCombustible,
+                             estados_carro=EstadoCarro,
+                             accion='editar')
+    
+    @app.route('/admin/carros/<id_carro>/eliminar', methods=['POST'])
+    @admin_required
+    def admin_carros_eliminar(id_carro):
+        """Eliminar carro"""
+        try:
+            resultado = car_manager.eliminar_carro(id_carro)
+            
+            if resultado['success']:
+                flash('Carro eliminado exitosamente', 'success')
+            else:
+                flash(f'Error eliminando carro: {resultado["message"]}', 'error')
+                
+        except Exception as e:
+            logger.error(f"Error eliminando carro: {e}")
+            flash('Error técnico eliminando carro', 'error')
+        
+        return redirect(url_for('admin_carros'))
+    
+    @app.route('/admin/carros/<id_carro>/estado', methods=['POST'])
+    @admin_required
+    def admin_carros_cambiar_estado(id_carro):
+        """Cambiar estado de un carro"""
+        try:
+            nuevo_estado = request.form.get('estado')
+            if not nuevo_estado:
+                flash('Estado requerido', 'error')
+                return redirect(url_for('admin_carros'))
+            
+            resultado = car_manager.cambiar_estado_carro(id_carro, EstadoCarro(nuevo_estado))
+            
+            if resultado['success']:
+                flash('Estado actualizado exitosamente', 'success')
+            else:
+                flash(f'Error cambiando estado: {resultado["message"]}', 'error')
+                
+        except Exception as e:
+            logger.error(f"Error cambiando estado: {e}")
+            flash('Error técnico cambiando estado', 'error')
+        
+        return redirect(url_for('admin_carros'))
+    
+    @app.route('/api/carros/disponibles')
+    @admin_required
+    def api_carros_disponibles():
+        """API para obtener carros disponibles"""
+        try:
+            licencias = request.args.getlist('licencias')
+            licencias_obj = [TipoLicencia(l) for l in licencias if l] if licencias else None
+            
+            carros = car_manager.obtener_carros_disponibles(licencias_obj)
+            
+            return jsonify({
+                'success': True,
+                'carros': [carro.to_dict() for carro in carros]
+            })
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo carros disponibles: {e}")
+            return jsonify({'success': False, 'message': str(e)})
+    
+    # =================== FIN RUTAS DE GESTIÓN DE CARROS ===================
     
     # Manejadores de errores
     @app.errorhandler(404)
