@@ -98,18 +98,42 @@ def create_app(config_name='default'):
         return decorated_function
     
     # Decorador de validación de formularios
-    def validate_form(validator_class):
+    def validate_form(validator_method):
         def decorator(f):
             @wraps(f)
             def decorated_function(*args, **kwargs):
                 try:
-                    validator = validator_class(request.form)
-                    if not validator.validate():
-                        flash('Datos del formulario inválidos', 'error')
-                        return redirect(request.referrer or url_for('index'))
+                    # Usar el método estático directamente
+                    validation_result = validator_method(dict(request.form))
+                    
+                    # Manejar diferentes tipos de retorno
+                    if isinstance(validation_result, list):
+                        # Lista de errores (como validate_admin_login)
+                        if validation_result:
+                            flash(f'Error de validación: {validation_result[0]}', 'error')
+                            return redirect(request.referrer or url_for('index'))
+                    elif isinstance(validation_result, dict):
+                        # Diccionario con 'valid' key
+                        if not validation_result.get('valid', False):
+                            errors = validation_result.get('errors', {})
+                            if errors:
+                                # Mostrar el primer error encontrado
+                                first_error = next(iter(errors.values()))
+                                if isinstance(first_error, list):
+                                    flash(f'Error de validación: {first_error[0]}', 'error')
+                                else:
+                                    flash(f'Error de validación: {first_error}', 'error')
+                            else:
+                                flash('Datos del formulario inválidos', 'error')
+                            return redirect(request.referrer or url_for('index'))
+                    
                     return f(*args, **kwargs)
                 except ValidationError as e:
                     flash(f'Error de validación: {str(e)}', 'error')
+                    return redirect(request.referrer or url_for('index'))
+                except Exception as e:
+                    logger.error(f'Error en validación de formulario: {e}')
+                    flash('Error interno de validación', 'error')
                     return redirect(request.referrer or url_for('index'))
             return decorated_function
         return decorator
@@ -131,7 +155,7 @@ def create_app(config_name='default'):
             return render_template('index.html', estadisticas={})
     
     @app.route('/procesar', methods=['POST'], endpoint='procesar')
-    @validate_form(FormValidator)
+    @validate_form(FormValidator.validate_admin_login)
     def procesar_estudiante():
         """Procesar datos de estudiante"""
         try:
