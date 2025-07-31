@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ 'Editar' if viaje else 'Nuevo' }} Viaje - PUG Admin</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/validation.css') }}" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background-color: #f8f9fa; 
+        }
+        .header-admin {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .form-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .preview-card {
+            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            border-left: 4px solid #2196f3;
+        }
+        .required-field::after {
+            content: " *";
+            color: #dc3545;
+        }
+        .select2-container {
+            width: 100% !important;
+        }
+        .conductor-info {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            border-left: 3px solid #28a745;
+        }
+        .carro-info {
+            background: #fff3cd;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            border-left: 3px solid #ffc107;
+        }
+        .pasajero-item {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #17a2b8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-remove-pasajero {
+            background: none;
+            border: none;
+            color: #dc3545;
+            padding: 0.25rem;
+        }
+        .horario-sugerencia {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .zona-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .zona-option {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .zona-option:hover {
+            border-color: #28a745;
+            background: #f8f9fa;
+        }
+        .zona-option.selected {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .validation-feedback {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-admin">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1><i class="fas fa-{{ 'edit' if viaje else 'plus' }}"></i> {{ 'Editar' if viaje else 'Nuevo' }} Viaje</h1>
+                    <p class="mb-0">{{ 'Modificar información del viaje existente' if viaje else 'Crear nuevo viaje en el sistema' }}</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="{{ url_for('admin_viajes') }}" class="btn btn-outline-light">
+                        <i class="fas fa-arrow-left"></i> Volver a Viajes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Mensajes Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{{ 'exclamation-circle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }}"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="form-card">
+                    <form id="viajeForm" method="POST" novalidate>
+                        <!-- Información básica -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-info-circle"></i> Información Básica</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="fecha" class="form-label required-field">Fecha del viaje</label>
+                                <input type="date" class="form-control" id="fecha" name="fecha" 
+                                       value="{{ viaje.fecha if viaje else '' }}" required>
+                                <div class="invalid-feedback">Por favor selecciona una fecha válida.</div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="tipo_viaje" class="form-label required-field">Tipo de viaje</label>
+                                <select class="form-select" id="tipo_viaje" name="tipo_viaje" required>
+                                    <option value="">Seleccionar tipo...</option>
+                                    <option value="ida" {{ 'selected' if viaje and viaje.tipo_viaje == 'ida' else '' }}>
+                                        <i class="fas fa-arrow-right"></i> Ida (Casa → Universidad)
+                                    </option>
+                                    <option value="vuelta" {{ 'selected' if viaje and viaje.tipo_viaje == 'vuelta' else '' }}>
+                                        <i class="fas fa-arrow-left"></i> Vuelta (Universidad → Casa)
+                                    </option>
+                                </select>
+                                <div class="invalid-feedback">Por favor selecciona el tipo de viaje.</div>
+                            </div>
+                        </div>
+
+                        <!-- Horario -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-clock"></i> Horario</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="hora_salida" class="form-label required-field">Hora de salida</label>
+                                <input type="time" class="form-control" id="hora_salida" name="hora_salida" 
+                                       value="{{ viaje.hora_salida if viaje else '' }}" required>
+                                <div class="invalid-feedback">Por favor ingresa una hora de salida.</div>
+                                
+                                <div id="horarioSugerencias" class="horario-sugerencia" style="display: none;">
+                                    <small><strong>Horarios sugeridos para tipo seleccionado:</strong></small>
+                                    <div id="sugerenciasLista"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="hora_llegada_estimada" class="form-label">Hora estimada de llegada</label>
+                                <input type="time" class="form-control" id="hora_llegada_estimada" name="hora_llegada_estimada" 
+                                       value="{{ viaje.hora_llegada_estimada if viaje else '' }}" readonly>
+                                <small class="text-muted">Se calcula automáticamente (+30 min aprox.)</small>
+                            </div>
+                        </div>
+
+                        <!-- Rutas y ubicaciones -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-map-marker-alt"></i> Ruta</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="origen" class="form-label required-field">Origen</label>
+                                <input type="text" class="form-control" id="origen" name="origen" 
+                                       value="{{ viaje.origen if viaje else '' }}" required readonly>
+                                <div class="invalid-feedback">Por favor especifica el origen.</div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="destino" class="form-label required-field">Destino</label>
+                                <input type="text" class="form-control" id="destino" name="destino" 
+                                       value="{{ viaje.destino if viaje else '' }}" required readonly>
+                                <div class="invalid-feedback">Por favor especifica el destino.</div>
+                            </div>
+                        </div>
+
+                        <!-- Conductor y Vehículo -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-user-circle"></i> Conductor y Vehículo</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="matricola_conductor" class="form-label required-field">Conductor</label>
+                                <select class="form-select" id="matricola_conductor" name="matricola_conductor" required>
+                                    <option value="">Seleccionar conductor...</option>
+                                    {% for conductor in conductores_disponibles %}
+                                    <option value="{{ conductor.matricola }}" 
+                                            data-nombre="{{ conductor.nombre }}" 
+                                            data-telefono="{{ conductor.telefono }}"
+                                            {{ 'selected' if viaje and viaje.matricola_conductor == conductor.matricola else '' }}>
+                                        {{ conductor.nombre }} ({{ conductor.matricola }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="invalid-feedback">Por favor selecciona un conductor.</div>
+                                
+                                <div id="conductorInfo" class="conductor-info" style="display: none;">
+                                    <small>
+                                        <strong>Información del conductor:</strong><br>
+                                        <span id="conductorNombre"></span><br>
+                                        <i class="fas fa-phone"></i> <span id="conductorTelefono"></span>
+                                    </small>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="id_carro" class="form-label required-field">Vehículo</label>
+                                <select class="form-select" id="id_carro" name="id_carro" required>
+                                    <option value="">Primero selecciona conductor...</option>
+                                </select>
+                                <div class="invalid-feedback">Por favor selecciona un vehículo.</div>
+                                
+                                <div id="carroInfo" class="carro-info" style="display: none;">
+                                    <small>
+                                        <strong>Información del vehículo:</strong><br>
+                                        <span id="carroModelo"></span><br>
+                                        <i class="fas fa-users"></i> Capacidad: <span id="carroCapacidad"></span> personas
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pasajeros -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-users"></i> Pasajeros</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="buscar_pasajero" class="form-label">Agregar pasajeros</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="buscar_pasajero">
+                                        <option value="">Buscar estudiante...</option>
+                                        {% for estudiante in estudiantes_disponibles %}
+                                        <option value="{{ estudiante.matricola }}" 
+                                                data-nombre="{{ estudiante.nombre }}"
+                                                data-zona="{{ estudiante.zona_residencia }}">
+                                            {{ estudiante.nombre }} ({{ estudiante.matricola }}) - {{ estudiante.zona_residencia }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-outline-primary" onclick="agregarPasajero()">
+                                        <i class="fas fa-plus"></i> Agregar
+                                    </button>
+                                </div>
+                                
+                                <div id="listaPasajeros" class="mt-3">
+                                    {% if viaje and viaje.pasajeros %}
+                                        {% for pasajero in viaje.pasajeros %}
+                                        <div class="pasajero-item" data-matricola="{{ pasajero.matricola }}">
+                                            <div>
+                                                <strong>{{ pasajero.nombre }}</strong> ({{ pasajero.matricola }})<br>
+                                                <small class="text-muted">{{ pasajero.zona_residencia }}</small>
+                                            </div>
+                                            <button type="button" class="btn-remove-pasajero" onclick="removerPasajero('{{ pasajero.matricola }}')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                                
+                                <div id="alertaCapacidad" class="alert alert-warning mt-2" style="display: none;">
+                                    <i class="fas fa-exclamation-triangle"></i> 
+                                    <span id="alertaTexto"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observaciones -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5><i class="fas fa-comment"></i> Observaciones</h5>
+                                <hr>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="observaciones" class="form-label">Observaciones adicionales</label>
+                                <textarea class="form-control" id="observaciones" name="observaciones" 
+                                          rows="3" placeholder="Información adicional sobre el viaje...">{{ viaje.observaciones if viaje else '' }}</textarea>
+                                <small class="text-muted">Opcional: Detalles especiales, paradas adicionales, etc.</small>
+                            </div>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="row">
+                            <div class="col-12">
+                                <hr>
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('admin_viajes') }}" class="btn btn-outline-secondary">
+                                        <i class="fas fa-times"></i> Cancelar
+                                    </a>
+                                    <div>
+                                        <button type="button" class="btn btn-outline-info me-2" onclick="previsualizarViaje()">
+                                            <i class="fas fa-eye"></i> Previsualizar
+                                        </button>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-{{ 'save' if viaje else 'plus' }}"></i> 
+                                            {{ 'Actualizar' if viaje else 'Crear' }} Viaje
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Hidden inputs para pasajeros -->
+                        <input type="hidden" id="pasajeros_json" name="pasajeros_json" value="">
+                    </form>
+                </div>
+            </div>
+
+            <!-- Panel de previsualización -->
+            <div class="col-lg-4">
+                <div id="previewPanel" class="preview-card" style="display: none;">
+                    <h6><i class="fas fa-eye"></i> Previsualización del Viaje</h6>
+                    <div id="previewContent">
+                        <!-- Se rellena dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Ayuda contextual -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="fas fa-question-circle"></i> Ayuda</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled mb-0">
+                            <li><small><i class="fas fa-info-circle text-info"></i> Los campos marcados con * son obligatorios.</small></li>
+                            <li><small><i class="fas fa-clock text-warning"></i> Los horarios se sugieren según el tipo de viaje.</small></li>
+                            <li><small><i class="fas fa-users text-success"></i> La capacidad incluye al conductor.</small></li>
+                            <li><small><i class="fas fa-route text-primary"></i> Las rutas se establecen automáticamente.</small></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Variables globales
+        let pasajeros = [];
+        let capacidadMaxima = 0;
+        let carrosDisponibles = {{ carros_por_conductor | tojsonfilter | safe }};
+        
+        // Horarios sugeridos
+        const horariosSugeridos = {
+            'ida': ['06:30', '07:00', '07:30', '08:00', '08:30'],
+            'vuelta': ['15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00']
+        };
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cargar pasajeros existentes si es edición
+            {% if viaje and viaje.pasajeros %}
+                {% for pasajero in viaje.pasajeros %}
+                    pasajeros.push({
+                        matricola: '{{ pasajero.matricola }}',
+                        nombre: '{{ pasajero.nombre }}',
+                        zona_residencia: '{{ pasajero.zona_residencia }}'
+                    });
+                {% endfor %}
+            {% endif %}
+
+            // Event listeners
+            setupEventListeners();
+            
+            // Configuración inicial
+            actualizarRutas();
+            if (document.getElementById('matricola_conductor').value) {
+                cargarCarrosConductor();
+            }
+            actualizarPasajerosJSON();
+        });
+
+        function setupEventListeners() {
+            // Tipo de viaje change
+            document.getElementById('tipo_viaje').addEventListener('change', function() {
+                actualizarRutas();
+                mostrarHorariosSugeridos();
+            });
+
+            // Conductor change
+            document.getElementById('matricola_conductor').addEventListener('change', function() {
+                mostrarInfoConductor();
+                cargarCarrosConductor();
+            });
+
+            // Carro change
+            document.getElementById('id_carro').addEventListener('change', function() {
+                mostrarInfoCarro();
+                verificarCapacidad();
+            });
+
+            // Hora salida change
+            document.getElementById('hora_salida').addEventListener('change', function() {
+                calcularHoraLlegada();
+            });
+
+            // Fecha change
+            document.getElementById('fecha').addEventListener('change', function() {
+                const fechaSeleccionada = new Date(this.value);
+                const hoy = new Date();
+                hoy.setHours(0, 0, 0, 0);
+                
+                if (fechaSeleccionada < hoy) {
+                    this.setCustomValidity('La fecha no puede ser anterior a hoy');
+                } else {
+                    this.setCustomValidity('');
+                }
+            });
+
+            // Form submit
+            document.getElementById('viajeForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (validarFormulario()) {
+                    actualizarPasajerosJSON();
+                    this.submit();
+                }
+            });
+        }
+
+        function actualizarRutas() {
+            const tipoViaje = document.getElementById('tipo_viaje').value;
+            const origenInput = document.getElementById('origen');
+            const destinoInput = document.getElementById('destino');
+
+            if (tipoViaje === 'ida') {
+                origenInput.value = 'Zona Residencial';
+                destinoInput.value = 'Universidad Pontificia Gregoriana';
+            } else if (tipoViaje === 'vuelta') {
+                origenInput.value = 'Universidad Pontificia Gregoriana';
+                destinoInput.value = 'Zona Residencial';
+            } else {
+                origenInput.value = '';
+                destinoInput.value = '';
+            }
+        }
+
+        function mostrarHorariosSugeridos() {
+            const tipoViaje = document.getElementById('tipo_viaje').value;
+            const sugerenciasDiv = document.getElementById('horarioSugerencias');
+            const listaDiv = document.getElementById('sugerenciasLista');
+
+            if (tipoViaje && horariosSugeridos[tipoViaje]) {
+                const horarios = horariosSugeridos[tipoViaje];
+                listaDiv.innerHTML = horarios.map(hora => 
+                    `<span class="badge bg-secondary me-1 mb-1" style="cursor: pointer;" onclick="seleccionarHorario('${hora}')">${hora}</span>`
+                ).join('');
+                sugerenciasDiv.style.display = 'block';
+            } else {
+                sugerenciasDiv.style.display = 'none';
+            }
+        }
+
+        function seleccionarHorario(hora) {
+            document.getElementById('hora_salida').value = hora;
+            calcularHoraLlegada();
+        }
+
+        function calcularHoraLlegada() {
+            const horaSalida = document.getElementById('hora_salida').value;
+            if (horaSalida) {
+                const [horas, minutos] = horaSalida.split(':').map(Number);
+                const fechaSalida = new Date();
+                fechaSalida.setHours(horas, minutos + 30); // +30 minutos estimados
+
+                const horaLlegada = fechaSalida.toTimeString().slice(0, 5);
+                document.getElementById('hora_llegada_estimada').value = horaLlegada;
+            }
+        }
+
+        function mostrarInfoConductor() {
+            const select = document.getElementById('matricola_conductor');
+            const infoDiv = document.getElementById('conductorInfo');
+            
+            if (select.value) {
+                const option = select.selectedOptions[0];
+                document.getElementById('conductorNombre').textContent = option.dataset.nombre;
+                document.getElementById('conductorTelefono').textContent = option.dataset.telefono;
+                infoDiv.style.display = 'block';
+            } else {
+                infoDiv.style.display = 'none';
+            }
+        }
+
+        function cargarCarrosConductor() {
+            const conductorMatricola = document.getElementById('matricola_conductor').value;
+            const carroSelect = document.getElementById('id_carro');
+            
+            carroSelect.innerHTML = '<option value="">Seleccionar vehículo...</option>';
+            
+            if (conductorMatricola && carrosDisponibles[conductorMatricola]) {
+                carrosDisponibles[conductorMatricola].forEach(carro => {
+                    const option = document.createElement('option');
+                    option.value = carro.id_carro;
+                    option.textContent = `${carro.marca} ${carro.modelo} (${carro.placa})`;
+                    option.dataset.marca = carro.marca;
+                    option.dataset.modelo = carro.modelo;
+                    option.dataset.placa = carro.placa;
+                    option.dataset.capacidad = carro.capacidad_pasajeros;
+                    carroSelect.appendChild(option);
+                });
+            }
+        }
+
+        function mostrarInfoCarro() {
+            const select = document.getElementById('id_carro');
+            const infoDiv = document.getElementById('carroInfo');
+            
+            if (select.value) {
+                const option = select.selectedOptions[0];
+                document.getElementById('carroModelo').textContent = 
+                    `${option.dataset.marca} ${option.dataset.modelo} (${option.dataset.placa})`;
+                document.getElementById('carroCapacidad').textContent = option.dataset.capacidad;
+                
+                capacidadMaxima = parseInt(option.dataset.capacidad);
+                verificarCapacidad();
+                infoDiv.style.display = 'block';
+            } else {
+                infoDiv.style.display = 'none';
+                capacidadMaxima = 0;
+            }
+        }
+
+        function agregarPasajero() {
+            const select = document.getElementById('buscar_pasajero');
+            if (!select.value) return;
+
+            const option = select.selectedOptions[0];
+            const matricola = option.value;
+            
+            // Verificar si ya está agregado
+            if (pasajeros.find(p => p.matricola === matricola)) {
+                alert('Este estudiante ya está agregado al viaje.');
+                return;
+            }
+
+            // Verificar capacidad
+            if (pasajeros.length >= capacidadMaxima - 1) { // -1 por el conductor
+                alert('Se ha alcanzado la capacidad máxima del vehículo.');
+                return;
+            }
+
+            // Agregar pasajero
+            const pasajero = {
+                matricola: matricola,
+                nombre: option.dataset.nombre,
+                zona_residencia: option.dataset.zona
+            };
+            
+            pasajeros.push(pasajero);
+            actualizarListaPasajeros();
+            verificarCapacidad();
+            
+            // Reset select
+            select.value = '';
+        }
+
+        function removerPasajero(matricola) {
+            pasajeros = pasajeros.filter(p => p.matricola !== matricola);
+            actualizarListaPasajeros();
+            verificarCapacidad();
+        }
+
+        function actualizarListaPasajeros() {
+            const lista = document.getElementById('listaPasajeros');
+            lista.innerHTML = pasajeros.map(pasajero => `
+                <div class="pasajero-item" data-matricola="${pasajero.matricola}">
+                    <div>
+                        <strong>${pasajero.nombre}</strong> (${pasajero.matricola})<br>
+                        <small class="text-muted">${pasajero.zona_residencia}</small>
+                    </div>
+                    <button type="button" class="btn-remove-pasajero" onclick="removerPasajero('${pasajero.matricola}')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            actualizarPasajerosJSON();
+        }
+
+        function verificarCapacidad() {
+            const alerta = document.getElementById('alertaCapacidad');
+            const texto = document.getElementById('alertaTexto');
+            
+            if (capacidadMaxima > 0) {
+                const ocupacionActual = pasajeros.length + 1; // +1 conductor
+                
+                if (ocupacionActual > capacidadMaxima) {
+                    alerta.className = 'alert alert-danger mt-2';
+                    texto.textContent = `Exceso de capacidad: ${ocupacionActual}/${capacidadMaxima} personas`;
+                    alerta.style.display = 'block';
+                } else if (ocupacionActual === capacidadMaxima) {
+                    alerta.className = 'alert alert-success mt-2';
+                    texto.textContent = `Capacidad completa: ${ocupacionActual}/${capacidadMaxima} personas`;
+                    alerta.style.display = 'block';
+                } else {
+                    alerta.className = 'alert alert-info mt-2';
+                    texto.textContent = `Ocupación actual: ${ocupacionActual}/${capacidadMaxima} personas`;
+                    alerta.style.display = 'block';
+                }
+            } else {
+                alerta.style.display = 'none';
+            }
+        }
+
+        function actualizarPasajerosJSON() {
+            document.getElementById('pasajeros_json').value = JSON.stringify(pasajeros);
+        }
+
+        function previsualizarViaje() {
+            const panel = document.getElementById('previewPanel');
+            const content = document.getElementById('previewContent');
+            
+            const datos = {
+                fecha: document.getElementById('fecha').value,
+                tipo: document.getElementById('tipo_viaje').value,
+                hora_salida: document.getElementById('hora_salida').value,
+                origen: document.getElementById('origen').value,
+                destino: document.getElementById('destino').value,
+                conductor: document.getElementById('matricola_conductor').selectedOptions[0]?.text || '',
+                carro: document.getElementById('id_carro').selectedOptions[0]?.text || '',
+                pasajeros: pasajeros.length,
+                observaciones: document.getElementById('observaciones').value
+            };
+
+            content.innerHTML = `
+                <div class="mb-2"><strong>Fecha:</strong> ${datos.fecha}</div>
+                <div class="mb-2"><strong>Tipo:</strong> ${datos.tipo}</div>
+                <div class="mb-2"><strong>Hora:</strong> ${datos.hora_salida}</div>
+                <div class="mb-2"><strong>Ruta:</strong> ${datos.origen} → ${datos.destino}</div>
+                <div class="mb-2"><strong>Conductor:</strong> ${datos.conductor}</div>
+                <div class="mb-2"><strong>Vehículo:</strong> ${datos.carro}</div>
+                <div class="mb-2"><strong>Pasajeros:</strong> ${datos.pasajeros}</div>
+                ${datos.observaciones ? `<div class="mb-2"><strong>Obs:</strong> ${datos.observaciones}</div>` : ''}
+            `;
+            
+            panel.style.display = 'block';
+        }
+
+        function validarFormulario() {
+            const form = document.getElementById('viajeForm');
+            if (!form.checkValidity()) {
+                form.classList.add('was-validated');
+                return false;
+            }
+
+            // Validaciones adicionales
+            if (capacidadMaxima > 0 && pasajeros.length + 1 > capacidadMaxima) {
+                alert('El número de pasajeros excede la capacidad del vehículo.');
+                return false;
+            }
+
+            return true;
+        }
+    </script>
+</body>
+</html>

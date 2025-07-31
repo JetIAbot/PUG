@@ -22,6 +22,8 @@ from core.student_scheduler import StudentScheduler
 from core.data_processor import DataProcessor
 from core.firebase_manager import FirebaseManager
 from core.car_manager import CarManager
+from core.student_manager import StudentManager
+from core.viaje_manager import ViajeManager
 from core.models import TipoCarro, TipoCombustible, EstadoCarro, TipoLicencia
 from utils.validators import FormValidator, ValidationError
 from utils.logger_config import security_logger, setup_logging
@@ -524,6 +526,334 @@ def create_app(config_name='default'):
     # =================== FIN RUTAS DE GESTIÓN DE CARROS ===================
     
     # Manejadores de errores
+    
+    # ============================================================================
+    # RUTAS PARA GESTIÓN DE ESTUDIANTES
+    # ============================================================================
+    
+    @app.route('/admin/estudiantes')
+    @admin_required
+    def admin_estudiantes():
+        """Listar todos los estudiantes"""
+        try:
+            student_manager = StudentManager()
+            estudiantes = student_manager.listar_estudiantes()
+            estadisticas = student_manager.obtener_estadisticas()
+            
+            return render_template('admin/estudiantes.html', 
+                                 estudiantes=estudiantes,
+                                 estadisticas=estadisticas)
+        except Exception as e:
+            logger.error(f"Error en admin_estudiantes: {e}")
+            flash(f'Error al cargar estudiantes: {str(e)}', 'error')
+            return redirect(url_for('admin_panel'))
+    
+    @app.route('/admin/estudiantes/nuevo')
+    @admin_required
+    def admin_estudiantes_nuevo():
+        """Formulario para crear nuevo estudiante"""
+        tipos_licencia = [{'value': t.value, 'name': t.value} for t in TipoLicencia]
+        return render_template('admin/estudiantes_form.html', 
+                             tipos_licencia=tipos_licencia,
+                             modo='crear')
+    
+    @app.route('/admin/estudiantes/crear', methods=['POST'])
+    @admin_required
+    def admin_estudiantes_crear():
+        """Crear nuevo estudiante"""
+        try:
+            student_manager = StudentManager()
+            
+            # Obtener datos del formulario
+            estudiante_data = {
+                'matricola': request.form.get('matricola'),
+                'nombre': request.form.get('nombre'),
+                'apellido': request.form.get('apellido'),
+                'email': request.form.get('email'),
+                'telefono': request.form.get('telefono', ''),
+                'tiene_licencia': request.form.get('tiene_licencia') == 'on',
+                'tipos_licencia': request.form.getlist('tipos_licencia'),
+                'fecha_vencimiento_licencia': request.form.get('fecha_vencimiento_licencia'),
+                'viaja_hoy': request.form.get('viaja_hoy') == 'on'
+            }
+            
+            resultado = student_manager.crear_estudiante(estudiante_data)
+            
+            if resultado['success']:
+                flash(resultado['message'], 'success')
+                return redirect(url_for('admin_estudiantes'))
+            else:
+                flash(f"Error: {resultado['message']}", 'error')
+                for error in resultado.get('errors', []):
+                    flash(error, 'error')
+                return redirect(url_for('admin_estudiantes_nuevo'))
+                
+        except Exception as e:
+            logger.error(f"Error creando estudiante: {e}")
+            flash(f'Error técnico: {str(e)}', 'error')
+            return redirect(url_for('admin_estudiantes_nuevo'))
+    
+    @app.route('/admin/estudiantes/<matricola>')
+    @admin_required
+    def admin_estudiante_detalle(matricola):
+        """Ver detalles de un estudiante específico"""
+        try:
+            student_manager = StudentManager()
+            estudiante = student_manager.obtener_estudiante(matricola)
+            
+            if not estudiante:
+                flash('Estudiante no encontrado', 'error')
+                return redirect(url_for('admin_estudiantes'))
+            
+            return render_template('admin/estudiante_detalle.html', 
+                                 estudiante=estudiante)
+        except Exception as e:
+            logger.error(f"Error obteniendo estudiante {matricola}: {e}")
+            flash(f'Error al cargar estudiante: {str(e)}', 'error')
+            return redirect(url_for('admin_estudiantes'))
+    
+    @app.route('/admin/estudiantes/<matricola>/editar')
+    @admin_required
+    def admin_estudiante_editar(matricola):
+        """Formulario para editar estudiante"""
+        try:
+            student_manager = StudentManager()
+            estudiante = student_manager.obtener_estudiante(matricola)
+            
+            if not estudiante:
+                flash('Estudiante no encontrado', 'error')
+                return redirect(url_for('admin_estudiantes'))
+            
+            tipos_licencia = [{'value': t.value, 'name': t.value} for t in TipoLicencia]
+            return render_template('admin/estudiantes_form.html', 
+                                 estudiante=estudiante,
+                                 tipos_licencia=tipos_licencia,
+                                 modo='editar')
+        except Exception as e:
+            logger.error(f"Error cargando formulario edición {matricola}: {e}")
+            flash(f'Error al cargar formulario: {str(e)}', 'error')
+            return redirect(url_for('admin_estudiantes'))
+    
+    @app.route('/admin/estudiantes/<matricola>/actualizar', methods=['POST'])
+    @admin_required
+    def admin_estudiante_actualizar(matricola):
+        """Actualizar estudiante existente"""
+        try:
+            student_manager = StudentManager()
+            
+            # Obtener datos del formulario
+            datos_actualizacion = {
+                'nombre': request.form.get('nombre'),
+                'apellido': request.form.get('apellido'),
+                'email': request.form.get('email'),
+                'telefono': request.form.get('telefono', ''),
+                'tiene_licencia': request.form.get('tiene_licencia') == 'on',
+                'tipos_licencia': request.form.getlist('tipos_licencia'),
+                'fecha_vencimiento_licencia': request.form.get('fecha_vencimiento_licencia'),
+                'viaja_hoy': request.form.get('viaja_hoy') == 'on'
+            }
+            
+            resultado = student_manager.actualizar_estudiante(matricola, datos_actualizacion)
+            
+            if resultado['success']:
+                flash(resultado['message'], 'success')
+                return redirect(url_for('admin_estudiante_detalle', matricola=matricola))
+            else:
+                flash(f"Error: {resultado['message']}", 'error')
+                for error in resultado.get('errors', []):
+                    flash(error, 'error')
+                return redirect(url_for('admin_estudiante_editar', matricola=matricola))
+                
+        except Exception as e:
+            logger.error(f"Error actualizando estudiante {matricola}: {e}")
+            flash(f'Error técnico: {str(e)}', 'error')
+            return redirect(url_for('admin_estudiante_editar', matricola=matricola))
+    
+    @app.route('/admin/estudiantes/<matricola>/eliminar', methods=['POST'])
+    @admin_required
+    def admin_estudiante_eliminar(matricola):
+        """Eliminar estudiante"""
+        try:
+            student_manager = StudentManager()
+            resultado = student_manager.eliminar_estudiante(matricola)
+            
+            if resultado['success']:
+                flash(resultado['message'], 'success')
+            else:
+                flash(f"Error: {resultado['message']}", 'error')
+                
+            return redirect(url_for('admin_estudiantes'))
+                
+        except Exception as e:
+            logger.error(f"Error eliminando estudiante {matricola}: {e}")
+            flash(f'Error técnico: {str(e)}', 'error')
+            return redirect(url_for('admin_estudiantes'))
+    
+    # ============================================================================
+    # RUTAS PARA GESTIÓN DE VIAJES
+    # ============================================================================
+    
+    @app.route('/admin/viajes')
+    @admin_required
+    def admin_viajes():
+        """Listar todos los viajes"""
+        try:
+            viaje_manager = ViajeManager()
+            fecha_filtro = request.args.get('fecha')
+            estado_filtro = request.args.get('estado')
+            
+            viajes = viaje_manager.listar_viajes(fecha=fecha_filtro, estado=estado_filtro)
+            
+            return render_template('admin/viajes.html', 
+                                 viajes=viajes,
+                                 fecha_filtro=fecha_filtro,
+                                 estado_filtro=estado_filtro)
+        except Exception as e:
+            logger.error(f"Error en admin_viajes: {e}")
+            flash(f'Error al cargar viajes: {str(e)}', 'error')
+            return redirect(url_for('admin_panel'))
+    
+    @app.route('/admin/viajes/nuevo')
+    @admin_required
+    def admin_viaje_nuevo():
+        """Formulario para crear nuevo viaje"""
+        try:
+            car_manager = CarManager()
+            student_manager = StudentManager()
+            
+            carros_disponibles = car_manager.listar_carros({'estado': 'disponible'})
+            conductores = student_manager.buscar_conductores_disponibles()
+            
+            return render_template('admin/viaje_form.html', 
+                                 carros=carros_disponibles,
+                                 conductores=conductores,
+                                 modo='crear')
+        except Exception as e:
+            logger.error(f"Error cargando formulario viaje: {e}")
+            flash(f'Error al cargar formulario: {str(e)}', 'error')
+            return redirect(url_for('admin_viajes'))
+    
+    @app.route('/admin/viajes/crear', methods=['POST'])
+    @admin_required
+    def admin_viaje_crear():
+        """Crear nuevo viaje"""
+        try:
+            viaje_manager = ViajeManager()
+            
+            # Obtener datos del formulario
+            viaje_data = {
+                'fecha': request.form.get('fecha'),
+                'hora_salida': request.form.get('hora_salida'),
+                'origen': request.form.get('origen'),
+                'destino': request.form.get('destino'),
+                'id_carro': request.form.get('id_carro'),
+                'matricola_conductor': request.form.get('matricola_conductor'),
+                'observaciones': request.form.get('observaciones', '')
+            }
+            
+            resultado = viaje_manager.crear_viaje(viaje_data)
+            
+            if resultado['success']:
+                flash(resultado['message'], 'success')
+                return redirect(url_for('admin_viajes'))
+            else:
+                flash(f"Error: {resultado['message']}", 'error')
+                for error in resultado.get('errors', []):
+                    flash(error, 'error')
+                return redirect(url_for('admin_viaje_nuevo'))
+                
+        except Exception as e:
+            logger.error(f"Error creando viaje: {e}")
+            flash(f'Error técnico: {str(e)}', 'error')
+            return redirect(url_for('admin_viaje_nuevo'))
+    
+    @app.route('/admin/viajes/<id_viaje>')
+    @admin_required
+    def admin_viaje_detalle(id_viaje):
+        """Ver detalles de un viaje específico"""
+        try:
+            viaje_manager = ViajeManager()
+            viaje = viaje_manager.obtener_viaje(id_viaje)
+            
+            if not viaje:
+                flash('Viaje no encontrado', 'error')
+                return redirect(url_for('admin_viajes'))
+            
+            # Obtener detalles adicionales
+            car_manager = CarManager()
+            student_manager = StudentManager()
+            
+            carro = car_manager.obtener_carro(viaje['id_carro'])
+            conductor = student_manager.obtener_estudiante(viaje['matricola_conductor'])
+            
+            pasajeros_info = []
+            for matricola in viaje.get('pasajeros', []):
+                pasajero = student_manager.obtener_estudiante(matricola)
+                if pasajero:
+                    pasajeros_info.append(pasajero)
+            
+            return render_template('admin/viaje_detalle.html', 
+                                 viaje=viaje,
+                                 carro=carro,
+                                 conductor=conductor,
+                                 pasajeros=pasajeros_info)
+        except Exception as e:
+            logger.error(f"Error obteniendo viaje {id_viaje}: {e}")
+            flash(f'Error al cargar viaje: {str(e)}', 'error')
+            return redirect(url_for('admin_viajes'))
+    
+    @app.route('/admin/listas-diarias')
+    @admin_required
+    def admin_listas_diarias():
+        """Gestión de listas diarias de viajes"""
+        try:
+            viaje_manager = ViajeManager()
+            fecha_hoy = datetime.now().strftime('%Y-%m-%d')
+            
+            # Obtener lista de hoy si existe
+            lista_hoy = viaje_manager.obtener_lista_diaria(fecha_hoy)
+            
+            return render_template('admin/listas_diarias.html', 
+                                 lista_hoy=lista_hoy,
+                                 fecha_hoy=fecha_hoy)
+        except Exception as e:
+            logger.error(f"Error en listas diarias: {e}")
+            flash(f'Error al cargar listas: {str(e)}', 'error')
+            return redirect(url_for('admin_panel'))
+    
+    @app.route('/admin/asignacion-automatica', methods=['POST'])
+    @admin_required
+    def admin_asignacion_automatica():
+        """Generar asignación automática de estudiantes a carros"""
+        try:
+            viaje_manager = ViajeManager()
+            fecha = request.form.get('fecha', datetime.now().strftime('%Y-%m-%d'))
+            
+            resultado = viaje_manager.generar_asignacion_automatica(fecha)
+            
+            if resultado['success']:
+                flash(f"Asignación automática completada: {resultado['message']}", 'success')
+                
+                # Crear los viajes en la base de datos
+                viajes_creados = 0
+                for viaje_data in resultado['data']['viajes_generados']:
+                    resultado_creacion = viaje_manager.crear_viaje(viaje_data)
+                    if resultado_creacion['success']:
+                        viajes_creados += 1
+                
+                flash(f"Se crearon {viajes_creados} viajes exitosamente", 'info')
+            else:
+                flash(f"Error en asignación automática: {resultado['message']}", 'error')
+                for error in resultado.get('errors', []):
+                    flash(error, 'error')
+            
+            return redirect(url_for('admin_listas_diarias'))
+                
+        except Exception as e:
+            logger.error(f"Error en asignación automática: {e}")
+            flash(f'Error técnico: {str(e)}', 'error')
+            return redirect(url_for('admin_listas_diarias'))
+
     @app.errorhandler(404)
     def not_found_error(error):
         return render_template('index.html'), 404

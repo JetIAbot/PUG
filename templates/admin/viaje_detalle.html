@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle del Viaje - PUG Admin</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background-color: #f8f9fa; 
+        }
+        .header-admin {
+            background: linear-gradient(135deg, #007bff 0%, #6f42c1 100%);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .viaje-header {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-left: 6px solid #007bff;
+        }
+        .info-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .estado-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .estado-planificado {
+            background: #e3f2fd;
+            color: #1976d2;
+            border: 2px solid #1976d2;
+        }
+        .estado-en-progreso {
+            background: #fff3e0;
+            color: #f57c00;
+            border: 2px solid #f57c00;
+        }
+        .estado-completado {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border: 2px solid #2e7d32;
+        }
+        .estado-cancelado {
+            background: #ffebee;
+            color: #c62828;
+            border: 2px solid #c62828;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0.75rem;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #dee2e6;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -1.25rem;
+            top: 0.25rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #007bff;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .pasajero-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #17a2b8;
+            transition: all 0.3s ease;
+        }
+        .pasajero-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .conductor-highlight {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border-left-color: #28a745;
+        }
+        .ocupacion-visual {
+            display: flex;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+        .asiento {
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            border: 2px solid #dee2e6;
+        }
+        .asiento.ocupado {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        .asiento.conductor {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .asiento.disponible {
+            background: #f8f9fa;
+            color: #6c757d;
+        }
+        .ruta-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: linear-gradient(90deg, #e3f2fd 0%, #f3e5f5 100%);
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        .ubicacion {
+            text-align: center;
+            flex: 1;
+        }
+        .flecha {
+            color: #007bff;
+            font-size: 1.5rem;
+        }
+        .btn-estado {
+            min-width: 120px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-admin">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1><i class="fas fa-eye"></i> Detalle del Viaje</h1>
+                    <p class="mb-0">Información completa y gestión del viaje</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="{{ url_for('admin_viajes') }}" class="btn btn-outline-light me-2">
+                        <i class="fas fa-list"></i> Lista de Viajes
+                    </a>
+                    <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-light">
+                        <i class="fas fa-home"></i> Panel Admin
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Mensajes Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{{ 'exclamation-circle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }}"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Header del viaje -->
+        <div class="viaje-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="d-flex align-items-center mb-2">
+                        <h2 class="me-3">
+                            {% if viaje.tipo_viaje == 'ida' %}
+                                <i class="fas fa-arrow-right text-primary"></i> Viaje de Ida
+                            {% elif viaje.tipo_viaje == 'vuelta' %}
+                                <i class="fas fa-arrow-left text-purple"></i> Viaje de Vuelta
+                            {% else %}
+                                <i class="fas fa-route"></i> Viaje
+                            {% endif %}
+                        </h2>
+                        <span class="estado-badge estado-{{ viaje.estado.replace('_', '-') }}">
+                            {{ viaje.estado.replace('_', ' ').title() }}
+                        </span>
+                    </div>
+                    <h4>{{ viaje.fecha }} - {{ viaje.hora_salida }}</h4>
+                    
+                    <!-- Ruta visual -->
+                    <div class="ruta-visual">
+                        <div class="ubicacion">
+                            <i class="fas fa-map-marker-alt fa-2x text-success"></i>
+                            <div><strong>{{ viaje.origen }}</strong></div>
+                            <small class="text-muted">Origen</small>
+                        </div>
+                        <div class="flecha">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                        <div class="ubicacion">
+                            <i class="fas fa-flag-checkered fa-2x text-danger"></i>
+                            <div><strong>{{ viaje.destino }}</strong></div>
+                            <small class="text-muted">Destino</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <!-- Acciones principales -->
+                    <div class="mb-3">
+                        {% if viaje.estado == 'planificado' %}
+                        <button class="btn btn-success btn-estado me-2" onclick="cambiarEstado('en_progreso')">
+                            <i class="fas fa-play"></i> Iniciar Viaje
+                        </button>
+                        {% elif viaje.estado == 'en_progreso' %}
+                        <button class="btn btn-primary btn-estado me-2" onclick="cambiarEstado('completado')">
+                            <i class="fas fa-check"></i> Completar
+                        </button>
+                        {% endif %}
+                        
+                        {% if viaje.estado in ['planificado', 'en_progreso'] %}
+                        <button class="btn btn-outline-danger btn-estado" onclick="cambiarEstado('cancelado')">
+                            <i class="fas fa-times"></i> Cancelar
+                        </button>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        <a href="{{ url_for('admin_viaje_editar', id_viaje=viaje.id_viaje) }}" 
+                           class="btn btn-outline-primary me-1">
+                            <i class="fas fa-edit"></i> Editar
+                        </a>
+                        <button class="btn btn-outline-info me-1" onclick="descargarPDF()">
+                            <i class="fas fa-download"></i> PDF
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="compartirWhatsApp()">
+                            <i class="fab fa-whatsapp"></i> WhatsApp
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Información del conductor y vehículo -->
+            <div class="col-lg-4">
+                <div class="info-card">
+                    <h5><i class="fas fa-user-circle"></i> Conductor</h5>
+                    <div class="conductor-highlight pasajero-card">
+                        <div class="d-flex align-items-center">
+                            <div class="me-3">
+                                <i class="fas fa-steering-wheel fa-2x"></i>
+                            </div>
+                            <div>
+                                <strong>{{ viaje.conductor_nombre }}</strong><br>
+                                <small>{{ viaje.matricola_conductor }}</small><br>
+                                <small><i class="fas fa-phone"></i> {{ viaje.conductor_telefono }}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h5><i class="fas fa-car"></i> Vehículo</h5>
+                    <div class="mb-3">
+                        <strong>{{ viaje.carro_marca }} {{ viaje.carro_modelo }}</strong><br>
+                        <span class="badge bg-secondary">{{ viaje.carro_placa }}</span><br>
+                        <small class="text-muted">
+                            <i class="fas fa-users"></i> Capacidad: {{ viaje.capacidad_maxima }} personas<br>
+                            <i class="fas fa-palette"></i> Color: {{ viaje.carro_color }}<br>
+                            <i class="fas fa-calendar"></i> Año: {{ viaje.carro_año }}
+                        </small>
+                    </div>
+                    
+                    <!-- Visualización de ocupación -->
+                    <div>
+                        <strong>Ocupación Actual:</strong>
+                        <div class="ocupacion-visual">
+                            <!-- Conductor -->
+                            <div class="asiento conductor" title="Conductor">
+                                <i class="fas fa-steering-wheel"></i>
+                            </div>
+                            <!-- Pasajeros -->
+                            {% for i in range(1, viaje.capacidad_maxima) %}
+                                {% if i <= viaje.pasajeros|length %}
+                                    <div class="asiento ocupado" title="Pasajero {{ i }}">{{ i }}</div>
+                                {% else %}
+                                    <div class="asiento disponible" title="Disponible">-</div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <small class="text-muted">
+                            {{ viaje.pasajeros|length + 1 }}/{{ viaje.capacidad_maxima }} ocupado
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Información adicional -->
+                <div class="info-card">
+                    <h5><i class="fas fa-info-circle"></i> Información Adicional</h5>
+                    <div class="mb-2">
+                        <strong>ID del Viaje:</strong><br>
+                        <code>{{ viaje.id_viaje }}</code>
+                    </div>
+                    <div class="mb-2">
+                        <strong>Creado:</strong><br>
+                        <small>{{ viaje.fecha_creacion or 'No disponible' }}</small>
+                    </div>
+                    {% if viaje.hora_llegada_estimada %}
+                    <div class="mb-2">
+                        <strong>Llegada Estimada:</strong><br>
+                        <small>{{ viaje.hora_llegada_estimada }}</small>
+                    </div>
+                    {% endif %}
+                    {% if viaje.observaciones %}
+                    <div class="mb-2">
+                        <strong>Observaciones:</strong><br>
+                        <small>{{ viaje.observaciones }}</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Lista de pasajeros -->
+            <div class="col-lg-8">
+                <div class="info-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5><i class="fas fa-users"></i> Pasajeros ({{ viaje.pasajeros|length }})</h5>
+                        {% if viaje.estado == 'planificado' %}
+                        <button class="btn btn-outline-primary btn-sm" onclick="mostrarAgregarPasajero()">
+                            <i class="fas fa-plus"></i> Agregar Pasajero
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    {% if viaje.pasajeros %}
+                        {% for pasajero in viaje.pasajeros %}
+                        <div class="pasajero-card">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ pasajero.nombre }}</strong><br>
+                                    <small class="text-muted">
+                                        <i class="fas fa-id-card"></i> {{ pasajero.matricola }}<br>
+                                        <i class="fas fa-map-marker-alt"></i> {{ pasajero.zona_residencia }}<br>
+                                        {% if pasajero.telefono %}
+                                        <i class="fas fa-phone"></i> {{ pasajero.telefono }}
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                <div>
+                                    {% if viaje.estado == 'planificado' %}
+                                    <button class="btn btn-outline-danger btn-sm" 
+                                            onclick="removerPasajero('{{ pasajero.matricola }}')">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                    {% endif %}
+                                    <button class="btn btn-outline-info btn-sm ms-1" 
+                                            onclick="contactarPasajero('{{ pasajero.telefono }}', '{{ pasajero.nombre }}')">
+                                        <i class="fas fa-comment"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-user-plus fa-3x text-muted mb-3"></i>
+                            <h6 class="text-muted">No hay pasajeros asignados</h6>
+                            <p class="text-muted">El conductor viajará solo en este viaje</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Timeline del viaje -->
+                <div class="info-card">
+                    <h5><i class="fas fa-clock"></i> Timeline del Viaje</h5>
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <strong>Viaje Creado</strong><br>
+                            <small class="text-muted">{{ viaje.fecha_creacion or 'Información no disponible' }}</small>
+                        </div>
+                        
+                        {% if viaje.estado in ['en_progreso', 'completado'] %}
+                        <div class="timeline-item">
+                            <strong>Viaje Iniciado</strong><br>
+                            <small class="text-muted">{{ viaje.hora_inicio or 'Información no disponible' }}</small>
+                        </div>
+                        {% endif %}
+                        
+                        {% if viaje.estado == 'completado' %}
+                        <div class="timeline-item">
+                            <strong>Viaje Completado</strong><br>
+                            <small class="text-muted">{{ viaje.hora_fin or 'Información no disponible' }}</small>
+                        </div>
+                        {% endif %}
+                        
+                        {% if viaje.estado == 'cancelado' %}
+                        <div class="timeline-item">
+                            <strong>Viaje Cancelado</strong><br>
+                            <small class="text-muted">{{ viaje.fecha_cancelacion or 'Información no disponible' }}</small>
+                            {% if viaje.motivo_cancelacion %}
+                            <br><small class="text-danger">Motivo: {{ viaje.motivo_cancelacion }}</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para cambio de estado -->
+    <div class="modal fade" id="estadoModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cambiar Estado del Viaje</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="estadoTexto"></p>
+                    <div id="motivoCancelacion" style="display: none;">
+                        <label for="motivo" class="form-label">Motivo de cancelación:</label>
+                        <textarea class="form-control" id="motivo" rows="3" 
+                                  placeholder="Describe el motivo de la cancelación..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="confirmarCambio">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar pasajero -->
+    <div class="modal fade" id="agregarPasajeroModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Agregar Pasajero</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="estudiante_select" class="form-label">Seleccionar estudiante:</label>
+                    <select class="form-select" id="estudiante_select">
+                        <option value="">Buscar estudiante...</option>
+                        {% for estudiante in estudiantes_disponibles %}
+                        <option value="{{ estudiante.matricola }}" 
+                                data-nombre="{{ estudiante.nombre }}"
+                                data-zona="{{ estudiante.zona_residencia }}">
+                            {{ estudiante.nombre }} ({{ estudiante.matricola }}) - {{ estudiante.zona_residencia }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmarAgregarPasajero()">Agregar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let estadoActual = '{{ viaje.estado }}';
+        let nuevoEstado = null;
+
+        function cambiarEstado(estado) {
+            nuevoEstado = estado;
+            const textos = {
+                'en_progreso': '¿Confirmas que deseas iniciar este viaje?',
+                'completado': '¿Confirmas que este viaje ha sido completado?',
+                'cancelado': '¿Estás seguro de que deseas cancelar este viaje?'
+            };
+
+            document.getElementById('estadoTexto').textContent = textos[estado];
+            
+            // Mostrar campo de motivo si es cancelación
+            const motivoDiv = document.getElementById('motivoCancelacion');
+            if (estado === 'cancelado') {
+                motivoDiv.style.display = 'block';
+            } else {
+                motivoDiv.style.display = 'none';
+            }
+
+            const modal = new bootstrap.Modal(document.getElementById('estadoModal'));
+            modal.show();
+        }
+
+        document.getElementById('confirmarCambio').addEventListener('click', function() {
+            if (nuevoEstado) {
+                const datos = {
+                    estado: nuevoEstado,
+                    id_viaje: '{{ viaje.id_viaje }}'
+                };
+
+                if (nuevoEstado === 'cancelado') {
+                    datos.motivo = document.getElementById('motivo').value;
+                }
+
+                // TODO: Implementar llamada AJAX para cambiar estado
+                console.log('Cambiar estado:', datos);
+                alert(`Funcionalidad en desarrollo: Cambiar estado a ${nuevoEstado}`);
+                
+                const modal = bootstrap.Modal.getInstance(document.getElementById('estadoModal'));
+                modal.hide();
+            }
+        });
+
+        function mostrarAgregarPasajero() {
+            const modal = new bootstrap.Modal(document.getElementById('agregarPasajeroModal'));
+            modal.show();
+        }
+
+        function confirmarAgregarPasajero() {
+            const select = document.getElementById('estudiante_select');
+            if (select.value) {
+                // TODO: Implementar agregar pasajero
+                alert(`Funcionalidad en desarrollo: Agregar pasajero ${select.value}`);
+                const modal = bootstrap.Modal.getInstance(document.getElementById('agregarPasajeroModal'));
+                modal.hide();
+            }
+        }
+
+        function removerPasajero(matricola) {
+            if (confirm('¿Estás seguro de que deseas remover este pasajero del viaje?')) {
+                // TODO: Implementar remoción de pasajero
+                alert(`Funcionalidad en desarrollo: Remover pasajero ${matricola}`);
+            }
+        }
+
+        function contactarPasajero(telefono, nombre) {
+            if (telefono) {
+                const mensaje = encodeURIComponent(`Hola ${nombre}, este es un mensaje relacionado con el viaje del ${document.querySelector('h4').textContent}.`);
+                window.open(`https://wa.me/${telefono}?text=${mensaje}`, '_blank');
+            } else {
+                alert('No hay número de teléfono disponible para este pasajero.');
+            }
+        }
+
+        function compartirWhatsApp() {
+            const viaje = {
+                fecha: '{{ viaje.fecha }}',
+                hora: '{{ viaje.hora_salida }}',
+                origen: '{{ viaje.origen }}',
+                destino: '{{ viaje.destino }}',
+                conductor: '{{ viaje.conductor_nombre }}',
+                placa: '{{ viaje.carro_placa }}'
+            };
+
+            const mensaje = `🚗 *Información del Viaje PUG*
+
+📅 Fecha: ${viaje.fecha}
+🕐 Hora: ${viaje.hora}
+📍 Origen: ${viaje.origen}
+🏁 Destino: ${viaje.destino}
+👨‍✈️ Conductor: ${viaje.conductor}
+🚙 Vehículo: ${viaje.placa}
+
+¡Viaje confirmado!`;
+
+            const mensajeCodificado = encodeURIComponent(mensaje);
+            window.open(`https://wa.me/?text=${mensajeCodificado}`, '_blank');
+        }
+
+        function descargarPDF() {
+            // TODO: Implementar descarga de PDF
+            alert('Funcionalidad en desarrollo: Descargar PDF del viaje');
+        }
+
+        // Auto-actualización cada 30 segundos si el viaje está en progreso
+        if (estadoActual === 'en_progreso') {
+            setInterval(function() {
+                // TODO: Implementar actualización en tiempo real
+                console.log('Verificando estado del viaje...');
+            }, 30000);
+        }
+    </script>
+
+    <style>
+        .text-purple {
+            color: #6f42c1 !important;
+        }
+    </style>
+</body>
+</html>

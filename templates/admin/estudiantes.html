@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Estudiantes - PUG Admin</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/validation.css') }}" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background-color: #f8f9fa; 
+        }
+        .header-admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            border-left: 4px solid #667eea;
+        }
+        .student-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .student-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .licencia-badge {
+            background: #28a745;
+            color: white;
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin: 0.1rem;
+        }
+        .sin-licencia {
+            background: #dc3545;
+        }
+        .viaja-hoy {
+            background: #007bff;
+        }
+        .no-viaja {
+            background: #6c757d;
+        }
+        .btn-action {
+            margin: 0.2rem;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+        .search-box {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="header-admin">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1><i class="fas fa-users"></i> Gestión de Estudiantes</h1>
+                    <p class="mb-0">Administración completa del sistema de estudiantes</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-light me-2">
+                        <i class="fas fa-arrow-left"></i> Volver al Panel
+                    </a>
+                    <a href="{{ url_for('admin_estudiantes_nuevo') }}" class="btn btn-warning">
+                        <i class="fas fa-plus"></i> Nuevo Estudiante
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Mensajes Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
+                        <i class="fas fa-{{ 'exclamation-circle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }}"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Estadísticas -->
+        {% if estadisticas %}
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3 class="text-primary">{{ estadisticas.resumen.total_estudiantes }}</h3>
+                    <p class="mb-0">Total Estudiantes</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3 class="text-success">{{ estadisticas.resumen.con_licencia }}</h3>
+                    <p class="mb-0">Con Licencia</p>
+                    <small class="text-muted">{{ estadisticas.resumen.porcentaje_con_licencia }}%</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3 class="text-info">{{ estadisticas.resumen.viajan_hoy }}</h3>
+                    <p class="mb-0">Viajan Hoy</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3 class="text-warning">{{ estadisticas.resumen.licencias_vigentes }}</h3>
+                    <p class="mb-0">Licencias Vigentes</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Filtros de búsqueda -->
+        <div class="search-box">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <input type="text" id="searchInput" class="form-control" placeholder="Buscar por nombre, matrícula o email...">
+                </div>
+                <div class="col-md-2">
+                    <select id="filterLicencia" class="form-select">
+                        <option value="">Todas las licencias</option>
+                        <option value="si">Con licencia</option>
+                        <option value="no">Sin licencia</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <select id="filterViaje" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="si">Viajan hoy</option>
+                        <option value="no">No viajan</option>
+                    </select>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-outline-secondary" onclick="limpiarFiltros()">
+                        <i class="fas fa-times"></i> Limpiar
+                    </button>
+                    <button class="btn btn-primary" onclick="exportarEstudiantes()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de estudiantes -->
+        <div class="row" id="estudiantesContainer">
+            {% for estudiante in estudiantes %}
+            <div class="col-md-6 col-lg-4 student-item" 
+                 data-matricola="{{ estudiante.matricola }}" 
+                 data-nombre="{{ estudiante.nombre }} {{ estudiante.apellido }}"
+                 data-email="{{ estudiante.email }}"
+                 data-licencia="{{ 'si' if estudiante.tiene_licencia else 'no' }}"
+                 data-viaja="{{ 'si' if estudiante.viaja_hoy else 'no' }}">
+                <div class="student-card">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="mb-0">{{ estudiante.nombre }} {{ estudiante.apellido }}</h5>
+                        <div>
+                            {% if estudiante.viaja_hoy %}
+                                <span class="licencia-badge viaja-hoy">
+                                    <i class="fas fa-bus"></i> Viaja hoy
+                                </span>
+                            {% else %}
+                                <span class="licencia-badge no-viaja">
+                                    <i class="fas fa-home"></i> No viaja
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <p class="text-muted mb-2">
+                        <i class="fas fa-id-card"></i> {{ estudiante.matricola }}<br>
+                        <i class="fas fa-envelope"></i> {{ estudiante.email }}
+                        {% if estudiante.telefono %}
+                            <br><i class="fas fa-phone"></i> {{ estudiante.telefono }}
+                        {% endif %}
+                    </p>
+                    
+                    <div class="mb-3">
+                        {% if estudiante.tiene_licencia %}
+                            {% for tipo_licencia in estudiante.tipos_licencia %}
+                                <span class="licencia-badge">{{ tipo_licencia }}</span>
+                            {% endfor %}
+                            {% if estudiante.fecha_vencimiento_licencia %}
+                                <small class="text-muted d-block mt-1">
+                                    <i class="fas fa-calendar"></i> Vence: {{ estudiante.fecha_vencimiento_licencia }}
+                                </small>
+                            {% endif %}
+                        {% else %}
+                            <span class="licencia-badge sin-licencia">
+                                <i class="fas fa-times"></i> Sin licencia
+                            </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{{ url_for('admin_estudiante_detalle', matricola=estudiante.matricola) }}" 
+                           class="btn btn-sm btn-outline-info btn-action">
+                            <i class="fas fa-eye"></i> Ver
+                        </a>
+                        <a href="{{ url_for('admin_estudiante_editar', matricola=estudiante.matricola) }}" 
+                           class="btn btn-sm btn-outline-warning btn-action">
+                            <i class="fas fa-edit"></i> Editar
+                        </a>
+                        <button class="btn btn-sm btn-outline-danger btn-action" 
+                                onclick="confirmarEliminacion('{{ estudiante.matricola }}', '{{ estudiante.nombre }} {{ estudiante.apellido }}')">
+                            <i class="fas fa-trash"></i> Eliminar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <h3 class="text-muted">No hay estudiantes registrados</h3>
+                    <p class="text-muted">Comienza agregando el primer estudiante al sistema</p>
+                    <a href="{{ url_for('admin_estudiantes_nuevo') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Agregar Primer Estudiante
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Modal de confirmación de eliminación -->
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Eliminación</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Estás seguro de que deseas eliminar al estudiante <strong id="studentToDelete"></strong>?</p>
+                    <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Esta acción no se puede deshacer.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <form id="deleteForm" method="POST" style="display: inline;">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Eliminar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Búsqueda en tiempo real
+        document.getElementById('searchInput').addEventListener('input', filtrarEstudiantes);
+        document.getElementById('filterLicencia').addEventListener('change', filtrarEstudiantes);
+        document.getElementById('filterViaje').addEventListener('change', filtrarEstudiantes);
+
+        function filtrarEstudiantes() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const filterLicencia = document.getElementById('filterLicencia').value;
+            const filterViaje = document.getElementById('filterViaje').value;
+            const estudiantes = document.querySelectorAll('.student-item');
+
+            estudiantes.forEach(estudiante => {
+                const nombre = estudiante.dataset.nombre.toLowerCase();
+                const matricola = estudiante.dataset.matricola.toLowerCase();
+                const email = estudiante.dataset.email.toLowerCase();
+                const licencia = estudiante.dataset.licencia;
+                const viaja = estudiante.dataset.viaja;
+
+                const matchSearch = !searchTerm || 
+                    nombre.includes(searchTerm) || 
+                    matricola.includes(searchTerm) || 
+                    email.includes(searchTerm);
+
+                const matchLicencia = !filterLicencia || licencia === filterLicencia;
+                const matchViaje = !filterViaje || viaja === filterViaje;
+
+                if (matchSearch && matchLicencia && matchViaje) {
+                    estudiante.style.display = 'block';
+                } else {
+                    estudiante.style.display = 'none';
+                }
+            });
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('filterLicencia').value = '';
+            document.getElementById('filterViaje').value = '';
+            filtrarEstudiantes();
+        }
+
+        function confirmarEliminacion(matricola, nombre) {
+            document.getElementById('studentToDelete').textContent = nombre;
+            document.getElementById('deleteForm').action = `/admin/estudiantes/${matricola}/eliminar`;
+            
+            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+            modal.show();
+        }
+
+        function exportarEstudiantes() {
+            // TODO: Implementar exportación
+            alert('Funcionalidad de exportación en desarrollo');
+        }
+    </script>
+</body>
+</html>
