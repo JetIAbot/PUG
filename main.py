@@ -11,6 +11,12 @@ import sys
 import logging
 from datetime import datetime, date
 
+# Forzar UTF-8 en Windows para caracteres especiales
+if os.name == "nt":
+    os.system("chcp 65001 > NUL 2>&1")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Silenciar logs de librerias durante la interaccion con el usuario
 logging.disable(logging.CRITICAL)
 
