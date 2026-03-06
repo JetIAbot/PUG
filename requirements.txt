@@ -1,26 +1,27 @@
-# Dependencias principales de la aplicación web
-Flask==2.3.2
-celery==5.3.6
-redis==5.0.1
+# PUG - Portal University Grouper
+# Dependencias para ejecucion en terminal (CLI)
+# Para instalar: pip install -r requirements.txt
+
+# --- NUCLEO ---
 python-dotenv==1.0.0
 google-cloud-firestore==2.14.0
 firebase-admin==6.3.0
 werkzeug==2.3.7
 
-# Dependencias para Web Scraping (Selenium y Parsers)
+# --- WEB SCRAPING (extraccion portal universitario) ---
 selenium==4.15.0
 webdriver-manager==4.0.1
 beautifulsoup4==4.12.2
 
-# Dependencias para Testing y Calidad
+# --- TESTING ---
 pytest==7.4.3
 pytest-cov==4.1.0
-pytest-flask==1.3.0
 pytest-mock==3.12.0
 
-# Dependencias para Producción
-gunicorn==21.2.0
-flower==2.0.1
-
-# Para instalar todas las dependencias, ejecuta:
-# pip install -r requirements.txt
+# --- INTERFAZ WEB (reactivar cuando se retome la interfaz) ---
+# Flask==2.3.2
+# celery==5.3.6
+# redis==5.0.1
+# gunicorn==21.2.0
+# flower==2.0.1
+# pytest-flask==1.3.0
