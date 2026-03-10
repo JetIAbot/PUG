@@ -39,39 +39,20 @@ class SecureWebDriver:
         try:
             chrome_options = Options()
             
-            # Configuraciones del driver
-            driver_options = [
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-extensions',
-                '--disable-plugins',
-                '--disable-blink-features=AutomationControlled',
-            ]
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
             
-            for option in driver_options:
-                chrome_options.add_argument(option)
-            
-            # Modo headless si está configurado
+            # Modo headless moderno (Chrome 109+)
             if os.getenv('HEADLESS_MODE', 'True').lower() == 'true':
-                chrome_options.add_argument('--headless')
+                chrome_options.add_argument('--headless=new')
                 self.logger.info("Modo headless activado")
-            
-            # User agent personalizado
-            chrome_options.add_argument(
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            )
             
             # Configurar servicio
             try:
                 from webdriver_manager.chrome import ChromeDriverManager
                 service = Service(ChromeDriverManager().install())
-                self.logger.info("Usando ChromeDriverManager")
             except Exception:
-                # Fallback al Chrome del sistema
                 service = Service()
-                self.logger.info("Usando Chrome del sistema")
             
             # Crear driver
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -109,7 +90,6 @@ class PortalExtractor:
     def __init__(self):
         self.logger = logging.getLogger('portal_extraction')
         self.portal_url = os.getenv('PORTAL_URL', 'https://segreteria.unigre.it')
-        self.use_real_portal = os.getenv('USE_REAL_PORTAL', 'False').lower() == 'true'
     
     def extraer_datos_estudiante(self, matricola: str, password: str) -> dict:
         """
@@ -123,16 +103,6 @@ class PortalExtractor:
             dict: Resultado con success, message, data y errors
         """
         self.logger.info(f"Iniciando extracción para matrícula: {matricola[:2]}****")
-        
-        # Verificar si el portal real está habilitado
-        if not self.use_real_portal:
-            self.logger.warning("Portal real no habilitado en configuración")
-            return {
-                'success': False,
-                'message': 'Portal real no habilitado en configuración',
-                'data': None,
-                'errors': ['Portal real deshabilitado']
-            }
         
         web_driver = SecureWebDriver()
         driver = web_driver.setup_driver()
@@ -306,29 +276,63 @@ class PortalExtractor:
             }
     
     def _extract_basic_info(self, driver: webdriver.Chrome, data: dict):
-        """Extraer información básica del estudiante desde GridView1"""
+        """Extraer información básica del estudiante desde Dati Anagrafici (studente.asp)"""
+        from selenium.webdriver.support.expected_conditions import staleness_of
         try:
-            self.logger.info("Extrayendo información básica")
-            sel = PORTAL_SELECTORS['datos_personales']
+            self.logger.info("Navegando a Dati Anagrafici")
+            wait = WebDriverWait(driver, 20)
 
-            tabla = driver.find_element(By.ID, "GridView1")
-            filas = tabla.find_elements(By.TAG_NAME, "tr")
-            if len(filas) >= 2:
-                celdas = filas[1].find_elements(By.TAG_NAME, "td")
-                data['student_info'] = {
-                    'matricola': celdas[0].text.strip() if len(celdas) > 0 else '',
-                    'cognome': celdas[1].text.strip() if len(celdas) > 1 else '',
-                    'nome': celdas[2].text.strip() if len(celdas) > 2 else '',
-                }
-                self.logger.info(
-                    f"Info extraída: {data['student_info']['cognome']} "
-                    f"{data['student_info']['nome']}"
-                )
-            else:
-                self.logger.warning("GridView1 no tiene filas de datos")
+            link = wait.until(
+                EC.element_to_be_clickable((By.LINK_TEXT, "Dati Anagrafici"))
+            )
+            old_body = driver.find_element(By.TAG_NAME, "body")
+            link.click()
+            WebDriverWait(driver, 20).until(staleness_of(old_body))
+            WebDriverWait(driver, 10).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            time.sleep(1)
+
+            # La info está en celdas planas: "Cognome:", valor, "Nome:", valor...
+            # Email y teléfono tienen layout especial (labels agrupados, valores después)
+            import re as _re
+            celdas = driver.find_elements(By.TAG_NAME, "td")
+            campos = {}
+            etiquetas_con_dos_puntos = {
+                "Matricola", "Cognome", "Nome", "Data di Nascita",
+                "Sesso", "Presso", "Indirizzo", "C.A.P.", "Città", "Provincia",
+            }
+            for i, celda in enumerate(celdas):
+                texto = celda.text.strip().rstrip(":")
+                if texto in etiquetas_con_dos_puntos and i + 1 < len(celdas):
+                    campos[texto] = celdas[i + 1].text.strip()
+
+            # Email y teléfono: buscar por patrón en el contenido de las celdas
+            for celda in celdas:
+                texto = celda.text.strip()
+                if _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', texto):
+                    campos['Email'] = texto
+                elif _re.match(r'^\d{9,15}$', texto):
+                    campos['Telefono'] = texto
+
+            data['student_info'] = {
+                'matricola': campos.get('Matricola', ''),
+                'cognome': campos.get('Cognome', ''),
+                'nome': campos.get('Nome', ''),
+                'email': campos.get('Email', ''),
+                'telefono': campos.get('Telefono', ''),
+            }
+            self.logger.info(
+                f"Info extraída: {data['student_info']['cognome']} "
+                f"{data['student_info']['nome']}"
+            )
+
+            # Volver al menú principal via URL directa (back() no funciona con postbacks ASP.NET)
+            self._navigate_to_page(driver, f"{self.portal_url}/asp/validate.asp")
+            wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Orario Settimanale")))
 
         except NoSuchElementException:
-            self.logger.warning("GridView1 no encontrado en la página")
+            self.logger.warning("Datos anagráficos no encontrados")
         except Exception as e:
             self.logger.warning(f"Error extrayendo información básica: {e}")
     
@@ -484,6 +488,10 @@ class PortalExtractor:
                 profesor = limpias[2]
             if len(limpias) >= 4:
                 aula = limpias[3]
+
+            # Limpiar espacios excesivos en aula (HTML tiene padding)
+            import re as _re
+            aula = _re.sub(r'\s{2,}', ' ', aula).strip()
 
             return {
                 'semestre': semestre,
