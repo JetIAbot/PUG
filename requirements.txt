@@ -4,12 +4,12 @@
 # Para instalar: pip install -r requirements.txt
 
 # --- NUCLEO ---
-python-dotenv>=1.0.0
-pyyaml>=6.0
-werkzeug>=2.3.7
+python-dotenv>=1.2.0
+pyyaml>=6.0.3
+werkzeug>=3.1.0
 
 # --- WEB SCRAPING (extraccion portal universitario) ---
-selenium>=4.27.0
+selenium>=4.41.0
 webdriver-manager>=4.0.2
 
 # --- INTERFAZ WEB (reactivar cuando se retome la interfaz) ---
