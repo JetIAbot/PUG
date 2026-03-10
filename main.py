@@ -381,20 +381,22 @@ def _tabla_estudiantes(estudiantes):
     if not estudiantes:
         warn("No se encontraron estudiantes.")
         return
-    fmt = "  {:<12} {:<26} {:<32} {:<10} {}"
+    fmt = "  {:<12} {:<26} {:<32} {} {}"
     print(f"\n{C.BOLD}" + fmt.format("MATRICOLA", "NOMBRE", "EMAIL", "LICENCIA", "HOY") + C.RESET)
     print("  " + "─" * 85)
     for e in estudiantes:
         d = e if isinstance(e, dict) else e.to_dict()
-        lic = f"{C.GREEN}Si{C.RESET}" if d.get("tiene_licencia") else f"{C.DIM}No{C.RESET}"
-        hoy = f"{C.GREEN}Si{C.RESET}" if d.get("viaja_hoy")      else f"{C.DIM}No{C.RESET}"
-        nombre = f"{d.get('nombre', '')} {d.get('apellido', '')}".strip()
+        lic_txt = "Si" if d.get("tiene_licencia") else "No"
+        hoy_txt = "Si" if d.get("viaja_hoy")      else "No"
+        lic_color = C.GREEN if d.get("tiene_licencia") else C.DIM
+        hoy_color = C.GREEN if d.get("viaja_hoy")      else C.DIM
+        nombre = f"{d.get('nombre', d.get('nome', ''))} {d.get('apellido', d.get('cognome', ''))}".strip()
         print(fmt.format(
             d.get("matricola", "")[:11],
             nombre[:25],
             d.get("email", "")[:31],
-            lic,
-            hoy
+            f"{lic_color}{lic_txt:<10}{C.RESET}",
+            f"{hoy_color}{hoy_txt}{C.RESET}"
         ))
 
 
@@ -422,6 +424,30 @@ def listar_estudiantes():
     except Exception as e:
         err(f"Error: {e}")
     pausar()
+
+
+DIAS_SEMANA_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+DIAS_CORTO = {"Lunedì": "LUN", "Martedì": "MAR", "Mercoledì": "MIE", "Giovedì": "JUE", "Venerdì": "VIE"}
+
+
+def _calcular_viaja_hoy(horario):
+    """Determina si el estudiante viaja hoy segun su horario."""
+    from datetime import datetime as _dt
+    idx = _dt.now().weekday()
+    if idx > 4:
+        return False, "Fin de semana", 0
+    dia_hoy = DIAS_SEMANA_IT[idx]
+    clases_hoy = [c for c in horario if c.get("dia") == dia_hoy]
+    return len(clases_hoy) > 0, dia_hoy, len(clases_hoy)
+
+
+def _calcular_disponibilidad_semanal(horario):
+    """Devuelve dict {dia_italiano: n_clases} para LUN-VIE."""
+    disp = {}
+    for dia in DIAS_SEMANA_IT:
+        n = len([c for c in horario if c.get("dia") == dia])
+        disp[dia] = n
+    return disp
 
 
 def _pedir_licencias():
@@ -461,15 +487,25 @@ def crear_estudiante():
         tipos_lic, fecha_venc = ([], None)
         if tiene_lic:
             tipos_lic, fecha_venc = _pedir_licencias()
-
-        viaja_hoy = pedir_confirmacion("Viaja hoy?")
+            # Verificar si la licencia esta vencida
+            if fecha_venc:
+                from datetime import date as _date
+                try:
+                    fecha_obj = _date.fromisoformat(fecha_venc)
+                    if fecha_obj < _date.today():
+                        warn("La licencia esta vencida. Se registrara como licencia vencida.")
+                        tiene_lic = False
+                        tipos_lic = []
+                        fecha_venc = None
+                except ValueError:
+                    warn("Fecha invalida, se ignora.")
+                    fecha_venc = None
 
         datos = {
             "matricola": matricola, "nombre": nombre, "apellido": apellido,
             "email": email, "telefono": telefono,
             "tiene_licencia": tiene_lic, "tipos_licencia": tipos_lic,
             "fecha_vencimiento_licencia": fecha_venc,
-            "viaja_hoy": viaja_hoy,
         }
         res = get_student_manager().crear_estudiante(datos)
         if res["success"]:
@@ -499,8 +535,40 @@ def registrar_via_portal():
         if resultado["success"]:
             ok("Datos extraidos y guardados.")
             data = resultado.get("data", {})
-            info(f"Estudiante: {data.get('nombre','')} {data.get('apellido','')}")
-            info(f"Clases encontradas: {len(data.get('clases', []))}")
+            perfil = data.get("perfil", {})
+            horario = data.get("horario", [])
+            info(f"Estudiante: {perfil.get('nome','')} {perfil.get('cognome','')}")
+            info(f"Clases encontradas: {len(horario)}")
+            if horario:
+                info(f"Semestre activo: {data.get('semestre_activo', '?')}")
+                info(f"Materias: {len(data.get('materias', []))}")
+
+            # Preguntas de carpooling
+            print()
+            subtitulo("DATOS DE CARPOOLING")
+            tiene_lic = pedir_confirmacion("Tiene licencia de conducir?")
+            tipos_lic, fecha_venc = [], None
+            if tiene_lic:
+                tipos_lic, fecha_venc = _pedir_licencias()
+
+            # Determinar viaja_hoy automaticamente segun horario
+            viaja_hoy, dia_hoy, n_clases = _calcular_viaja_hoy(horario)
+            if viaja_hoy:
+                info(f"Viaja hoy: Si ({n_clases} clases el {dia_hoy})")
+            else:
+                info(f"Viaja hoy: No (sin clases el {dia_hoy})")
+
+            datos_extra = {
+                "tiene_licencia": tiene_lic,
+                "tipos_licencia": tipos_lic,
+                "fecha_vencimiento_licencia": fecha_venc,
+                "viaja_hoy": viaja_hoy,
+            }
+            res = get_student_manager().actualizar_estudiante(matricola, datos_extra)
+            if res["success"]:
+                ok("Datos de carpooling guardados.")
+            else:
+                err(f"No se pudieron guardar datos extra: {res.get('message','')}")
         else:
             err(f"No se pudo extraer: {resultado.get('message','Error desconocido')}")
     except Exception as e:
@@ -517,20 +585,84 @@ def ver_estudiante():
             err("Estudiante no encontrado.")
         else:
             d = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
+            nombre = f"{d.get('nombre', d.get('nome', ''))} {d.get('apellido', d.get('cognome', ''))}".strip()
             print()
-            omitir = {"preferencias", "historial_conducciones"}
-            for k, v in d.items():
-                if k not in omitir:
-                    print(f"  {C.CYAN}{k:<35}{C.RESET} {v}")
-            clases = d.get("clases", [])
-            if clases:
-                print(f"\n  {C.BOLD}Horario ({len(clases)} clases):{C.RESET}")
-                for clase in clases[:12]:
-                    print(f"  {C.DIM}  {clase.get('dia',''):<12} "
-                          f"Bloque {clase.get('bloque',''):<4} "
-                          f"{clase.get('materia','')}{C.RESET}")
-                if len(clases) > 12:
-                    info(f"  ... y {len(clases)-12} mas")
+            # --- Perfil ---
+            print(f"  {C.BOLD}PERFIL{C.RESET}")
+            print(f"  {'─' * 50}")
+            print(f"  {C.CYAN}{'Nombre':<20}{C.RESET} {nombre}")
+            print(f"  {C.CYAN}{'Matricola':<20}{C.RESET} {d.get('matricola','')}")
+            print(f"  {C.CYAN}{'Email':<20}{C.RESET} {d.get('email','')}")
+            print(f"  {C.CYAN}{'Telefono':<20}{C.RESET} {d.get('telefono','')}")
+            sem = d.get('semestre_activo', '')
+            if sem:
+                print(f"  {C.CYAN}{'Semestre activo':<20}{C.RESET} {sem}")
+            lic = d.get('tiene_licencia', False)
+            print(f"  {C.CYAN}{'Licencia':<20}{C.RESET} {'Si' if lic else 'No'}")
+            if lic:
+                tipos = d.get('tipos_licencia', [])
+                if tipos:
+                    print(f"  {C.CYAN}{'  Tipos':<20}{C.RESET} {', '.join(tipos)}")
+                fv = d.get('fecha_vencimiento_licencia', '')
+                if fv:
+                    print(f"  {C.CYAN}{'  Vencimiento':<20}{C.RESET} {fv}")
+            viaja = d.get('viaja_hoy', False)
+            print(f"  {C.CYAN}{'Viaja hoy':<20}{C.RESET} {'Si' if viaja else 'No'}")
+
+            # --- Materias ---
+            materias = d.get("materias", [])
+            if materias:
+                print(f"\n  {C.BOLD}MATERIAS ({len(materias)}){C.RESET}")
+                print(f"  {'─' * 50}")
+                for m in materias:
+                    print(f"  {C.DIM}{m.get('codigo',''):<10}{C.RESET} {m.get('nombre','')}")
+                    print(f"  {'':<10} {C.DIM}{m.get('profesor','')}{C.RESET}")
+
+            # --- Horario tipo grilla ---
+            horario = d.get("horario", d.get("clases", []))
+            if horario:
+                dias_orden = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"]
+                dias_corto = {"Lunedì": "LUN", "Martedì": "MAR", "Mercoledì": "MIE", "Giovedì": "JUE", "Venerdì": "VIE"}
+                # Agrupar por (bloque, dia)
+                grid = {}
+                bloques_set = set()
+                for c in horario:
+                    blq = c.get("bloque", "")
+                    dia = c.get("dia", "")
+                    bloques_set.add(blq)
+                    grid[(blq, dia)] = c
+                bloques_romanos = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+                bloques = [b for b in bloques_romanos if b in bloques_set]
+
+                col_w = 18
+                print(f"\n  {C.BOLD}HORARIO SEMANAL (Semestre {d.get('semestre_activo','?')}){C.RESET}")
+                print(f"  {'─' * (8 + col_w * len(dias_orden))}")
+                # Encabezado
+                header = f"  {C.BOLD}{'BLQ':<8}"
+                for dia in dias_orden:
+                    header += f"{dias_corto.get(dia, dia):<{col_w}}"
+                header += C.RESET
+                print(header)
+                print(f"  {'─' * (8 + col_w * len(dias_orden))}")
+                # Filas por bloque
+                for blq in bloques:
+                    # Linea 1: codigo + materia abreviada
+                    linea1 = f"  {C.CYAN}{blq:<8}{C.RESET}"
+                    linea2 = f"  {'':<8}"
+                    for dia in dias_orden:
+                        clase = grid.get((blq, dia))
+                        if clase:
+                            cod = clase.get("codigo", "")
+                            mat = clase.get("materia", "")
+                            if len(mat) > col_w - 2:
+                                mat = mat[:col_w - 4] + ".."
+                            linea1 += f"{cod:<{col_w}}"
+                            linea2 += f"{C.DIM}{mat:<{col_w}}{C.RESET}"
+                        else:
+                            linea1 += f"{C.DIM}{'---':<{col_w}}{C.RESET}"
+                            linea2 += f"{'':<{col_w}}"
+                    print(linea1)
+                    print(linea2)
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -547,11 +679,13 @@ def editar_estudiante():
             pausar()
             return
         d = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
-        info(f"Editando: {d.get('nombre','')} {d.get('apellido','')} ({matricola})")
+        nom_actual = d.get('nombre', d.get('nome', ''))
+        ape_actual = d.get('apellido', d.get('cognome', ''))
+        info(f"Editando: {nom_actual} {ape_actual} ({matricola})")
         info("Enter mantiene el valor actual.")
         print()
-        nombre   = pedir("Nombre",   requerido=False, valor_defecto=d.get("nombre", ""))
-        apellido = pedir("Apellido", requerido=False, valor_defecto=d.get("apellido", ""))
+        nombre   = pedir("Nombre",   requerido=False, valor_defecto=nom_actual)
+        apellido = pedir("Apellido", requerido=False, valor_defecto=ape_actual)
         email    = pedir("Email",    requerido=False, valor_defecto=d.get("email", ""))
         telefono = pedir("Telefono", requerido=False, valor_defecto=d.get("telefono", ""))
 
@@ -565,10 +699,13 @@ def editar_estudiante():
         if tiene_lic and pedir_confirmacion("Actualizar datos de licencia?"):
             tipos_lic, fecha_venc = _pedir_licencias()
 
-        viaja_hoy_actual = d.get("viaja_hoy", False)
-        viaja_hoy = pedir_confirmacion(
-            f"Viaja hoy? (actual: {'Si' if viaja_hoy_actual else 'No'})"
-        )
+        # viaja_hoy se calcula automaticamente del horario
+        horario = d.get("horario", d.get("clases", []))
+        viaja_hoy, dia_hoy, n_clases = _calcular_viaja_hoy(horario)
+        if viaja_hoy:
+            info(f"Viaja hoy: Si ({n_clases} clases el {dia_hoy})")
+        else:
+            info(f"Viaja hoy: No (sin clases el {dia_hoy})")
 
         datos = {
             "nombre": nombre, "apellido": apellido, "email": email, "telefono": telefono,
@@ -588,23 +725,63 @@ def editar_estudiante():
 
 
 def marcar_disponibilidad():
-    subtitulo("DISPONIBILIDAD DE HOY")
-    matricola = pedir("Matricola")
+    subtitulo("DISPONIBILIDAD SEMANAL")
+    info("Calculando disponibilidad de TODOS los estudiantes para la semana...")
+    print()
     try:
         sm = get_student_manager()
-        estudiante = sm.obtener_estudiante(matricola)
-        if not estudiante:
-            err("Estudiante no encontrado.")
+        estudiantes = sm.listar_estudiantes()
+        if not estudiantes:
+            warn("No hay estudiantes registrados.")
             pausar()
             return
-        d = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
-        info(f"Estado actual: {'Viaja hoy' if d.get('viaja_hoy') else 'No viaja hoy'}")
-        viaja = pedir_confirmacion("Marcar como que VIAJA hoy?")
-        res = sm.actualizar_estudiante(matricola, {"viaja_hoy": viaja})
-        if res["success"]:
-            ok(f"Actualizado: {'Viaja hoy' if viaja else 'No viaja hoy'}")
+
+        from datetime import datetime as _dt
+        idx_hoy = _dt.now().weekday()
+        dia_hoy_it = DIAS_SEMANA_IT[idx_hoy] if idx_hoy < 5 else None
+
+        # Encabezado
+        col_n = 22
+        col_d = 8
+        header = f"  {'ESTUDIANTE':<{col_n}}"
+        for dia in DIAS_SEMANA_IT:
+            marca = "*" if dia == dia_hoy_it else " "
+            header += f"{DIAS_CORTO[dia]+marca:<{col_d}}"
+        print(f"{C.BOLD}{header}{C.RESET}")
+        print(f"  {'─' * (col_n + col_d * 5)}")
+
+        actualizados = 0
+        for e in estudiantes:
+            d = e if isinstance(e, dict) else e.to_dict()
+            mat = d.get("matricola", "")
+            nombre = f"{d.get('nombre', d.get('nome', ''))} {d.get('apellido', d.get('cognome', ''))}".strip()
+            horario = d.get("horario", d.get("clases", []))
+            disp = _calcular_disponibilidad_semanal(horario)
+
+            # Actualizar viaja_hoy basado en el dia actual
+            viaja_hoy = disp.get(dia_hoy_it, 0) > 0 if dia_hoy_it else False
+            sm.actualizar_estudiante(mat, {
+                "viaja_hoy": viaja_hoy,
+                "disponibilidad_semanal": {DIAS_CORTO[d_]: disp[d_] > 0 for d_ in DIAS_SEMANA_IT}
+            })
+            actualizados += 1
+
+            # Fila
+            linea = f"  {nombre[:col_n-1]:<{col_n}}"
+            for dia in DIAS_SEMANA_IT:
+                n = disp[dia]
+                if n > 0:
+                    linea += f"{C.GREEN}{'Si':^{col_d}}{C.RESET}"
+                else:
+                    linea += f"{C.DIM}{'--':^{col_d}}{C.RESET}"
+            print(linea)
+
+        print(f"  {'─' * (col_n + col_d * 5)}")
+        if dia_hoy_it:
+            info(f"* = hoy ({dia_hoy_it})")
         else:
-            err(res["message"])
+            info("Hoy es fin de semana — no hay clases.")
+        ok(f"{actualizados} estudiante(s) actualizados.")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -621,7 +798,7 @@ def eliminar_estudiante():
             pausar()
             return
         d = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
-        warn(f"Eliminar: {d.get('nombre','')} {d.get('apellido','')} ({matricola})")
+        warn(f"Eliminar: {d.get('nombre', d.get('nome',''))} {d.get('apellido', d.get('cognome',''))} ({matricola})")
         if pedir_confirmacion("Confirmar eliminacion"):
             res = sm.eliminar_estudiante(matricola)
             ok(res["message"]) if res["success"] else err(res["message"])

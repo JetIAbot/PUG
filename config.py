@@ -17,7 +17,6 @@ class Config:
     DATOS_PATH = os.getenv('DATOS_PATH', 'datos')
     
     # Portal Universitario
-    USE_REAL_PORTAL = os.getenv('USE_REAL_PORTAL', 'False').lower() == 'true'
     PORTAL_URL = os.getenv('PORTAL_URL', 'https://segreteria.unigre.it')
     HEADLESS_MODE = os.getenv('HEADLESS_MODE', 'True').lower() == 'true'
     
