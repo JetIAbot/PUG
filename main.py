@@ -131,16 +131,16 @@ def get_viaje_manager():
 
 
 def verificar_conexion():
-    """Verificar conexion a Firebase al iniciar. Devuelve bool."""
-    print(f"  {C.DIM}Verificando conexion a Firebase...{C.RESET}", end="", flush=True)
+    """Verificar acceso al almacenamiento local. Devuelve bool."""
+    print(f"  {C.DIM}Verificando almacenamiento local...{C.RESET}", end="", flush=True)
     try:
-        from core.firebase_manager import FirebaseManager
-        fb = FirebaseManager()
-        if fb.get_client():
-            print(f"\r  {C.GREEN}Firebase conectado.{C.RESET}                          ")
+        from core.obsidian_manager import ObsidianManager
+        storage = ObsidianManager()
+        if storage.test_connection():
+            print(f"\r  {C.GREEN}Almacenamiento local OK.{C.RESET}                          ")
             return True
         else:
-            print(f"\r  {C.RED}No se pudo conectar a Firebase.{C.RESET}               ")
+            print(f"\r  {C.RED}No se pudo acceder al almacenamiento.{C.RESET}               ")
             return False
     except Exception as e:
         print(f"\r  {C.RED}Error de conexion: {e}{C.RESET}")
@@ -948,7 +948,7 @@ def menu_sistema():
         limpiar()
         titulo("SISTEMA / CONFIGURACION")
         menu_opcion(1, "Estadisticas generales")
-        menu_opcion(2, "Verificar conexion Firebase")
+        menu_opcion(2, "Verificar almacenamiento local")
         menu_opcion(3, "Verificar Chrome / Selenium")
         menu_opcion(4, "Gestionar contrasena de administrador")
         menu_opcion(0, "Volver")
@@ -956,7 +956,7 @@ def menu_sistema():
         op = pedir("Opcion", requerido=False, valor_defecto="0")
         if   op == "0": break
         elif op == "1": estadisticas_generales()
-        elif op == "2": probar_firebase()
+        elif op == "2": probar_almacenamiento()
         elif op == "3": probar_chrome()
         elif op == "4": gestionar_admin()
         else: err("Opcion invalida.")
@@ -990,19 +990,19 @@ def estadisticas_generales():
     pausar()
 
 
-def probar_firebase():
-    subtitulo("VERIFICAR CONEXION FIREBASE")
+def probar_almacenamiento():
+    subtitulo("VERIFICAR ALMACENAMIENTO LOCAL")
     try:
-        from core.firebase_manager import FirebaseManager
-        client = FirebaseManager().get_client()
-        if client:
-            ok("Conexion a Firebase Firestore exitosa.")
+        from core.obsidian_manager import ObsidianManager
+        storage = ObsidianManager()
+        if storage.test_connection():
+            ok("Almacenamiento local accesible.")
+            stats = storage.get_statistics()
+            info(f"Directorio: {storage.datos_path}")
+            info(f"Colecciones: {stats.get('total_colecciones', 0)}")
+            info(f"Documentos: {stats.get('total_documentos', 0)}")
         else:
-            err("No se pudo obtener cliente.")
-            info("Verifica que firebase.json existe y es valido.")
-    except FileNotFoundError:
-        err("Archivo firebase.json no encontrado.")
-        info("Copia .env.example a .env y configura FIREBASE_CREDENTIALS_PATH.")
+            err("No se pudo acceder al almacenamiento.")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -1045,7 +1045,7 @@ def gestionar_admin():
             resultado = apm.generate_admin_hash(username, password)
             ok("Hash generado.")
             print(f"\n  {C.YELLOW}{resultado}{C.RESET}\n")
-            info("Guarda este hash en tu .env o en Firebase.")
+            info("Guarda este hash en tu .env.")
         elif op == "2":
             password     = pedir("Contrasena a verificar")
             hash_guardado = pedir("Hash guardado")
@@ -1116,8 +1116,8 @@ if __name__ == "__main__":
 
     if not verificar_conexion():
         print()
-        warn("Sin conexion a Firebase el sistema tiene funcionalidad limitada.")
-        warn("Verifica firebase.json y el archivo .env.")
+        warn("No se pudo acceder al almacenamiento local.")
+        warn("Verifica que la carpeta datos/ existe y es accesible.")
         if not pedir_confirmacion("Continuar de todas formas?"):
             sys.exit(1)
 

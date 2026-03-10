@@ -6,10 +6,8 @@ CRUD completo para gestión de estudiantes del sistema
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime, date
-from firebase_admin import firestore
-
 from .models import Estudiante, TipoLicencia
-from .firebase_manager import FirebaseManager
+from .obsidian_manager import ObsidianManager
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +15,9 @@ class StudentManager:
     """Gestor principal para operaciones CRUD de estudiantes"""
     
     def __init__(self):
-        self.firebase = FirebaseManager()
+        self.firebase = ObsidianManager()
         self.db = self.firebase.get_client()
         self.collection_name = 'estudiantes'
-        
-        if not self.db:
-            raise Exception("No se pudo conectar a Firebase")
     
     def crear_estudiante(self, estudiante_data: Dict[str, Any]) -> Dict[str, Any]:
         """

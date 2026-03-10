@@ -31,10 +31,10 @@ def test_imports():
         errores.append(f"❌ core.student_scheduler - ERROR: {e}")
     
     try:
-        from core.firebase_manager import FirebaseManager
-        logger.info("✅ core.firebase_manager - IMPORT OK")
+        from core.obsidian_manager import ObsidianManager
+        logger.info("✅ core.obsidian_manager - IMPORT OK")
     except Exception as e:
-        errores.append(f"❌ core.firebase_manager - ERROR: {e}")
+        errores.append(f"❌ core.obsidian_manager - ERROR: {e}")
     
     try:
         from core.portal_extractor import PortalExtractor

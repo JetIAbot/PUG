@@ -13,8 +13,8 @@ class Config:
     """Configuración base"""
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
     
-    # Firebase
-    FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase.json')
+    # Almacenamiento local (Obsidian-style markdown DB)
+    DATOS_PATH = os.getenv('DATOS_PATH', 'datos')
     
     # Portal Universitario
     USE_REAL_PORTAL = os.getenv('USE_REAL_PORTAL', 'False').lower() == 'true'
