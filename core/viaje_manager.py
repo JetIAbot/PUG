@@ -6,10 +6,8 @@ CRUD completo para gestión de viajes y listas diarias
 import logging
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, date, timedelta
-from firebase_admin import firestore
-
 from .models import Viaje, ListaViajes, Carro, Estudiante, EstadoViaje, EstadoLista, TipoLicencia
-from .firebase_manager import FirebaseManager
+from .obsidian_manager import ObsidianManager
 from .car_manager import CarManager
 from .student_manager import StudentManager
 
@@ -19,15 +17,12 @@ class ViajeManager:
     """Gestor principal para operaciones de viajes y listas diarias"""
     
     def __init__(self):
-        self.firebase = FirebaseManager()
+        self.firebase = ObsidianManager()
         self.db = self.firebase.get_client()
         self.car_manager = CarManager()
         self.student_manager = StudentManager()
         self.collection_viajes = 'viajes'
         self.collection_listas = 'listas_diarias'
-        
-        if not self.db:
-            raise Exception("No se pudo conectar a Firebase")
     
     def crear_viaje(self, viaje_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -398,7 +393,7 @@ class ViajeManager:
                 }
             
             # Obtener carros disponibles
-            carros_disponibles = self.car_manager.listar_carros({'estado': 'disponible'})
+            carros_disponibles = self.car_manager.obtener_todos_carros({'estado': 'disponible'})
             
             if not carros_disponibles:
                 return {

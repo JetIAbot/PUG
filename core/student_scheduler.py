@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 from utils.constants import ORDEN_BLOQUES, BLOQUES_A_HORAS
-from .firebase_manager import FirebaseManager
+from .obsidian_manager import ObsidianManager
 from .portal_extractor import PortalExtractor
 from .demo_generator import DemoDataGenerator
 
@@ -22,7 +22,7 @@ class StudentScheduler:
     
     def __init__(self):
         """Inicializar el programador de estudiantes"""
-        self.firebase = FirebaseManager()
+        self.firebase = ObsidianManager()
         self.portal = PortalExtractor()
         self.demo_generator = DemoDataGenerator()
     
@@ -95,7 +95,8 @@ class StudentScheduler:
             'horario': [],
             'materias': [],
             'calificaciones': [],
-            'estado_horarios': 'no_disponible'
+            'estado_horarios': 'no_disponible',
+            'semestre_activo': None
         }
         
         # Procesar información del estudiante
@@ -108,13 +109,28 @@ class StudentScheduler:
                 'telefono': student_info.get('telefono', 'No disponible')
             })
         
-        # Procesar horario
-        if 'schedule' in raw_data and raw_data['schedule']:
-            processed['horario'] = self._convertir_horario_portal(raw_data['schedule'])
+        # Procesar horario — filtrar solo el semestre activo
+        semestre_activo = raw_data.get('semestre_activo')
+        schedule = raw_data.get('schedule', [])
+
+        if schedule and semestre_activo:
+            # Filtrar solo las clases del semestre publicado
+            clases_activas = [
+                c for c in schedule if c.get('semestre') == semestre_activo
+            ]
+            processed['horario'] = self._convertir_horario_portal(clases_activas)
+            processed['semestre_activo'] = semestre_activo
             processed['estado_horarios'] = 'disponible'
-            logger.info(f"Horarios reales procesados: {len(processed['horario'])} clases")
+            logger.info(
+                f"Horarios reales procesados: {len(processed['horario'])} clases "
+                f"(semestre {semestre_activo})"
+            )
+        elif schedule:
+            # Hay datos pero no se determinó semestre activo — usar todos
+            processed['horario'] = self._convertir_horario_portal(schedule)
+            processed['estado_horarios'] = 'disponible'
+            logger.info(f"Horarios procesados: {len(processed['horario'])} clases")
         else:
-            # Generar horario de ejemplo para demostración
             processed['horario'] = self.demo_generator.generar_horario_demo()
             processed['estado_horarios'] = 'ejemplo_demo'
             logger.warning("Horarios no disponibles - usando datos de ejemplo")
@@ -133,24 +149,26 @@ class StudentScheduler:
     
     def _convertir_horario_portal(self, schedule_data: list) -> list:
         """
-        Convertir horario del portal al formato interno
+        Convertir horario del portal al formato interno.
         
-        Args:
-            schedule_data: Lista de clases del portal
-            
-        Returns:
-            list: Horario en formato interno
+        El portal_extractor produce dicts con keys:
+            semestre, bloque, dia, codigo, materia, profesor, aula
+        El formato interno usa:
+            materia, profesor, dia, bloque, aula, codigo, info_clase
         """
         horario_convertido = []
         
         for clase in schedule_data:
+            materia = clase.get('materia', '')
+            profesor = clase.get('profesor', '')
             clase_convertida = {
-                'materia': clase.get('subject', ''),
-                'profesor': clase.get('professor', ''),
-                'dia': clase.get('day', ''),
-                'bloque': clase.get('time_block', ''),
-                'aula': clase.get('room', ''),
-                'info_clase': f"{clase.get('subject', '')} - {clase.get('professor', '')}"
+                'codigo': clase.get('codigo', ''),
+                'materia': materia,
+                'profesor': profesor,
+                'dia': clase.get('dia', ''),
+                'bloque': clase.get('bloque', ''),
+                'aula': clase.get('aula', ''),
+                'info_clase': f"{materia} - {profesor}"
             }
             horario_convertido.append(clase_convertida)
         
@@ -356,15 +374,13 @@ class StudentScheduler:
         return "\n".join(info_adicional)
 
 # Funciones de compatibilidad para el sistema existente
-def inicializar_firebase():
-    """Función de compatibilidad - usar FirebaseManager"""
-    firebase_manager = FirebaseManager()
-    return firebase_manager.get_client()
+def inicializar_datos():
+    """Función de compatibilidad — retorna MarkdownDB client"""
+    return ObsidianManager().get_client()
 
-def guardar_en_firebase(db, matricola: str, datos_estudiante: dict) -> dict:
-    """Función de compatibilidad - usar FirebaseManager"""
-    firebase_manager = FirebaseManager()
-    return firebase_manager.guardar_estudiante(matricola, datos_estudiante)
+def guardar_datos(db, matricola: str, datos_estudiante: dict) -> dict:
+    """Función de compatibilidad"""
+    return ObsidianManager().guardar_estudiante(matricola, datos_estudiante)
 
 def extraer_datos_portal_real(matricola: str, password: str) -> dict:
     """Función de compatibilidad - usar StudentScheduler"""

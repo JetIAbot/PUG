@@ -41,7 +41,7 @@ PUG/
 │   ├── student_scheduler.py   # 👥 Algoritmo de agrupación (ex matchmaking.py)
 │   ├── portal_extractor.py    # 🌐 Extracción portal universitario (ex portal.py)
 │   ├── demo_generator.py      # 🎭 Generación datos demo (ex demo.py)
-│   ├── firebase_manager.py    # 🔥 Operaciones Firebase (ex firebase_ops.py)
+│   ├── obsidian_manager.py    # 📁 Almacenamiento local Markdown (reemplaza Firebase)
 │   └── data_processor.py      # 📊 Procesamiento de datos
 │
 ├── utils/                     # 🛠️ Utilidades y herramientas
@@ -176,12 +176,12 @@ PUG/
 - Optimización mediante algoritmos de matching
 - Métricas de calidad de agrupación
 
-### 3. 🔥 Gestión de Datos (`firebase_manager.py`)
-- Almacenamiento seguro en Firebase Firestore
-- Operaciones CRUD completas y optimizadas
-- Backup automático de datos críticos
-- Sincronización en tiempo real
-- Historial completo de cambios y auditoría
+### 3. � Almacenamiento Local (`obsidian_manager.py`)
+- Base de datos local con archivos Markdown + YAML frontmatter
+- Compatible con Obsidian para visualización y edición
+- Operaciones CRUD completas
+- Sin dependencias externas (solo PyYAML)
+- Datos legibles y portables
 
 ### 4. 🎭 Sistema de Demostración (`demo_generator.py`)
 - Generación inteligente de datos sintéticos
@@ -197,19 +197,17 @@ PUG/
 Crear archivo `.env` con configuraciones específicas:
 
 ```env
-# Configuración de Flask
-FLASK_ENV=development
-FLASK_DEBUG=true
+# Configuración del entorno
+APP_ENV=development
+DEBUG=True
 
-# Configuración de Firebase
-FIREBASE_PROJECT_ID=tu-proyecto-firebase
+# Almacenamiento local
+DATOS_PATH=datos
 
 # Configuración de logging
 LOG_LEVEL=INFO
-LOG_ROTATION_SIZE=10MB
 
 # Configuración de seguridad
-SECRET_KEY=tu-clave-secreta-aqui
 ADMIN_PASSWORD_HASH=hash-de-password-admin
 ```
 

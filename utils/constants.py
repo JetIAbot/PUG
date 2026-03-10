@@ -26,46 +26,39 @@ URL_PORTAL_UNIVERSIDAD = "https://segreteria.unigre.it/asp/authenticate.asp"
 URL_BASE_PORTAL = "https://segreteria.unigre.it"
 
 # --- SELECTORES DE SELENIUM PARA PORTAL ---
+# Verificado contra HTML real capturado el 2025-07-09
 PORTAL_SELECTORS = {
-    # Login
+    # Login — https://segreteria.unigre.it/asp/authenticate.asp
     'login': {
-        'usuario': ("name", "userId"),
-        'password': ("name", "pwd"),
-        'boton_login': ("name", "login"),
+        'usuario': ("name", "txtName"),
+        'password': ("name", "txtPassword"),
+        'boton_login': ("xpath", "//input[@type='submit' and @value='Accedi']"),
         'error_message': ("xpath", "//*[contains(text(), 'ERRORE')]")
     },
-    
-    # Post-login
+
+    # Post-login — página con links de navegación
     'dashboard': {
         'bienvenida': ("xpath", "//*[contains(text(), 'Benvenuto')]"),
         'link_horario': ("link text", "Orario Settimanale")
     },
-    
-    # Datos personales
+
+    # Información del estudiante — tabla GridView1 en orariopers.aspx
     'datos_personales': {
-        'tabla_info': ("class name", "renderedtable11"),
-        'nombre': ("xpath", "//td[contains(text(), 'Nome')]/following-sibling::td"),
-        'apellido': ("xpath", "//td[contains(text(), 'Cognome')]/following-sibling::td"),
-        'email': ("xpath", "//td[contains(text(), 'E-mail')]/following-sibling::td")
+        'tabla_info': ("id", "GridView1"),
+        'matricola': ("xpath", "//table[@id='GridView1']//tr[2]/td[1]"),
+        'apellido': ("xpath", "//table[@id='GridView1']//tr[2]/td[2]"),
+        'nombre': ("xpath", "//table[@id='GridView1']//tr[2]/td[3]")
     },
-    
-    # Horarios
+
+    # Horarios — div#orario1sem contiene ambos semestres como tablas sin ID
+    # Página: https://segreteria.unigre.it/framework/orariopers/orariopers.aspx
+    # Estructura: UpdatePanel1 > orario1sem > [H1 "Primo Semestre", table, H1 "Secondo Semestre", table]
     'horarios': {
         'contenedor_principal': ("id", "UpdatePanel1"),
-        'tabla_semestre_1': ("id", "gvOrario1"),
-        'tabla_semestre_2': ("id", "gvOrario2"),
-        'fila_clase': ("xpath", "//tr[contains(@class, 'gridrow')]"),
-        'celda_materia': ("td", 1),
-        'celda_profesor': ("td", 2),
-        'celda_dia': ("td", 3),
-        'celda_hora': ("td", 4),
-        'celda_aula': ("td", 5)
-    },
-    
-    # Materias
-    'materias': {
-        'tabla_materias': ("id", "gvMaterie"),
-        'fila_materia': ("xpath", "//tr[contains(@class, 'gridrow')]")
+        'contenedor_horarios': ("id", "orario1sem"),
+        'titulo_semestre': ("xpath", "//div[@id='orario1sem']//h1"),
+        'tablas_horario': ("xpath", "//div[@id='orario1sem']/table[@align='center']"),
+        'boton_volver': ("id", "Button1")
     }
 }
 
@@ -89,13 +82,12 @@ LOG_FORMATS = {
     'security': '%(asctime)s - SECURITY - %(levelname)s - %(message)s'
 }
 
-# --- CONFIGURACIÓN DE FIREBASE ---
-FIREBASE_COLLECTIONS = {
+# --- COLECCIONES DE DATOS ---
+DATOS_COLLECTIONS = {
     'estudiantes': 'estudiantes',
-    'horarios': 'horario',
-    'materias': 'materias',
-    'calificaciones': 'calificaciones',
-    'admin': 'admin_users'
+    'carros': 'carros',
+    'viajes': 'viajes',
+    'listas_diarias': 'listas_diarias',
 }
 
 # --- MENSAJES DEL SISTEMA ---
@@ -170,16 +162,4 @@ VALIDATION_RULES = {
     }
 }
 
-# --- CONFIGURACIÓN DE CELERY ---
-CELERY_TASK_ROUTES = {
-    'app.procesar_estudiante_async': {'queue': 'main'},
-    'app.cleanup_old_data': {'queue': 'maintenance'}
-}
-
-CELERY_BEAT_SCHEDULE = {
-    'cleanup-logs': {
-        'task': 'app.cleanup_old_logs',
-        'schedule': 86400.0,  # 24 horas
-    },
-}
 HORARIO_TABLA_SEMESTRE_2 = ("id", "gvOrario2") # Ejemplo: Tabla del segundo semestre

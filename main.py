@@ -11,6 +11,12 @@ import sys
 import logging
 from datetime import datetime, date
 
+# Forzar UTF-8 en Windows para caracteres especiales
+if os.name == "nt":
+    os.system("chcp 65001 > NUL 2>&1")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Silenciar logs de librerias durante la interaccion con el usuario
 logging.disable(logging.CRITICAL)
 
@@ -125,16 +131,16 @@ def get_viaje_manager():
 
 
 def verificar_conexion():
-    """Verificar conexion a Firebase al iniciar. Devuelve bool."""
-    print(f"  {C.DIM}Verificando conexion a Firebase...{C.RESET}", end="", flush=True)
+    """Verificar acceso al almacenamiento local. Devuelve bool."""
+    print(f"  {C.DIM}Verificando almacenamiento local...{C.RESET}", end="", flush=True)
     try:
-        from core.firebase_manager import FirebaseManager
-        fb = FirebaseManager()
-        if fb.get_client():
-            print(f"\r  {C.GREEN}Firebase conectado.{C.RESET}                          ")
+        from core.obsidian_manager import ObsidianManager
+        storage = ObsidianManager()
+        if storage.test_connection():
+            print(f"\r  {C.GREEN}Almacenamiento local OK.{C.RESET}                          ")
             return True
         else:
-            print(f"\r  {C.RED}No se pudo conectar a Firebase.{C.RESET}               ")
+            print(f"\r  {C.RED}No se pudo acceder al almacenamiento.{C.RESET}               ")
             return False
     except Exception as e:
         print(f"\r  {C.RED}Error de conexion: {e}{C.RESET}")
@@ -204,10 +210,11 @@ def listar_carros():
         carros = cm.obtener_todos_carros(filtros)
         _tabla_carros(carros)
         stats = cm.obtener_estadisticas()
-        print(f"\n  {C.DIM}Total: {stats.get('total',0)} | "
-              f"Disponibles: {stats.get('disponibles',0)} | "
-              f"En uso: {stats.get('en_uso',0)} | "
-              f"Mantenimiento: {stats.get('mantenimiento',0)}{C.RESET}")
+        por_estado = stats.get('por_estado', {})
+        print(f"\n  {C.DIM}Total: {stats.get('total_carros',0)} | "
+              f"Disponibles: {por_estado.get('disponible',0)} | "
+              f"En uso: {por_estado.get('en_uso',0)} | "
+              f"Mantenimiento: {por_estado.get('mantenimiento',0)}{C.RESET}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -408,9 +415,10 @@ def listar_estudiantes():
         estudiantes = sm.listar_estudiantes(filtros if filtros else None)
         _tabla_estudiantes(estudiantes)
         stats = sm.obtener_estadisticas()
-        print(f"\n  {C.DIM}Total: {stats.get('total',0)} | "
-              f"Conductores: {stats.get('conductores',0)} | "
-              f"Viajan hoy: {stats.get('viajan_hoy',0)}{C.RESET}")
+        resumen = stats.get('resumen', {})
+        print(f"\n  {C.DIM}Total: {resumen.get('total_estudiantes',0)} | "
+              f"Conductores: {resumen.get('con_licencia',0)} | "
+              f"Viajan hoy: {resumen.get('viajan_hoy',0)}{C.RESET}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -940,7 +948,7 @@ def menu_sistema():
         limpiar()
         titulo("SISTEMA / CONFIGURACION")
         menu_opcion(1, "Estadisticas generales")
-        menu_opcion(2, "Verificar conexion Firebase")
+        menu_opcion(2, "Verificar almacenamiento local")
         menu_opcion(3, "Verificar Chrome / Selenium")
         menu_opcion(4, "Gestionar contrasena de administrador")
         menu_opcion(0, "Volver")
@@ -948,7 +956,7 @@ def menu_sistema():
         op = pedir("Opcion", requerido=False, valor_defecto="0")
         if   op == "0": break
         elif op == "1": estadisticas_generales()
-        elif op == "2": probar_firebase()
+        elif op == "2": probar_almacenamiento()
         elif op == "3": probar_chrome()
         elif op == "4": gestionar_admin()
         else: err("Opcion invalida.")
@@ -962,16 +970,18 @@ def estadisticas_generales():
         viajes_hoy = get_viaje_manager().listar_viajes(fecha=date.today().isoformat())
 
         print(f"\n  {C.BOLD}CARROS{C.RESET}")
-        print(f"  Total             {stats_c.get('total',0)}")
-        print(f"  Disponibles       {stats_c.get('disponibles',0)}")
-        print(f"  En uso            {stats_c.get('en_uso',0)}")
-        print(f"  Mantenimiento     {stats_c.get('mantenimiento',0)}")
-        print(f"  Fuera de servicio {stats_c.get('fuera_servicio',0)}")
+        por_estado = stats_c.get('por_estado', {})
+        print(f"  Total             {stats_c.get('total_carros',0)}")
+        print(f"  Disponibles       {por_estado.get('disponible',0)}")
+        print(f"  En uso            {por_estado.get('en_uso',0)}")
+        print(f"  Mantenimiento     {por_estado.get('mantenimiento',0)}")
+        print(f"  Fuera de servicio {por_estado.get('fuera_de_servicio',0)}")
 
+        resumen_e = stats_e.get('resumen', {})
         print(f"\n  {C.BOLD}ESTUDIANTES{C.RESET}")
-        print(f"  Total             {stats_e.get('total',0)}")
-        print(f"  Conductores       {stats_e.get('conductores',0)}")
-        print(f"  Viajan hoy        {stats_e.get('viajan_hoy',0)}")
+        print(f"  Total             {resumen_e.get('total_estudiantes',0)}")
+        print(f"  Conductores       {resumen_e.get('con_licencia',0)}")
+        print(f"  Viajan hoy        {resumen_e.get('viajan_hoy',0)}")
 
         print(f"\n  {C.BOLD}VIAJES HOY  ({date.today().isoformat()}){C.RESET}")
         print(f"  Total             {len(viajes_hoy)}")
@@ -980,19 +990,19 @@ def estadisticas_generales():
     pausar()
 
 
-def probar_firebase():
-    subtitulo("VERIFICAR CONEXION FIREBASE")
+def probar_almacenamiento():
+    subtitulo("VERIFICAR ALMACENAMIENTO LOCAL")
     try:
-        from core.firebase_manager import FirebaseManager
-        client = FirebaseManager().get_client()
-        if client:
-            ok("Conexion a Firebase Firestore exitosa.")
+        from core.obsidian_manager import ObsidianManager
+        storage = ObsidianManager()
+        if storage.test_connection():
+            ok("Almacenamiento local accesible.")
+            stats = storage.get_statistics()
+            info(f"Directorio: {storage.datos_path}")
+            info(f"Colecciones: {stats.get('total_colecciones', 0)}")
+            info(f"Documentos: {stats.get('total_documentos', 0)}")
         else:
-            err("No se pudo obtener cliente.")
-            info("Verifica que credenciales.json existe y es valido.")
-    except FileNotFoundError:
-        err("Archivo credenciales.json no encontrado.")
-        info("Copia .env.example a .env y configura FIREBASE_CREDENTIALS_PATH.")
+            err("No se pudo acceder al almacenamiento.")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -1035,7 +1045,7 @@ def gestionar_admin():
             resultado = apm.generate_admin_hash(username, password)
             ok("Hash generado.")
             print(f"\n  {C.YELLOW}{resultado}{C.RESET}\n")
-            info("Guarda este hash en tu .env o en Firebase.")
+            info("Guarda este hash en tu .env.")
         elif op == "2":
             password     = pedir("Contrasena a verificar")
             hash_guardado = pedir("Hash guardado")
@@ -1106,8 +1116,8 @@ if __name__ == "__main__":
 
     if not verificar_conexion():
         print()
-        warn("Sin conexion a Firebase el sistema tiene funcionalidad limitada.")
-        warn("Verifica credenciales.json y el archivo .env.")
+        warn("No se pudo acceder al almacenamiento local.")
+        warn("Verifica que la carpeta datos/ existe y es accesible.")
         if not pedir_confirmacion("Continuar de todas formas?"):
             sys.exit(1)
 

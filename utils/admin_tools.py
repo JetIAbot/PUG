@@ -109,19 +109,19 @@ class SystemMaintenance:
             return False
     
     @staticmethod
-    def verify_firebase_connection() -> bool:
+    def verify_storage_connection() -> bool:
         """
-        Verificar la conexión a Firebase
+        Verificar el acceso al almacenamiento local (datos/)
         
         Returns:
-            bool: True si la conexión es exitosa
+            bool: True si es accesible
         """
         try:
-            from core.firebase_manager import FirebaseManager
-            firebase = FirebaseManager()
-            return firebase.test_connection()
+            from core.obsidian_manager import ObsidianManager
+            storage = ObsidianManager()
+            return storage.test_connection()
         except Exception as e:
-            logger.error(f"Error verificando conexión Firebase: {e}")
+            logger.error(f"Error verificando almacenamiento: {e}")
             return False
 
 def main():
@@ -139,16 +139,16 @@ def main():
                 print(f"✅ Logs anteriores a {days} días limpiados exitosamente")
             else:
                 print("❌ Error limpiando logs")
-        elif command == "test-firebase":
-            if SystemMaintenance.verify_firebase_connection():
-                print("✅ Conexión a Firebase exitosa")
+        elif command == "test-storage":
+            if SystemMaintenance.verify_storage_connection():
+                print("✅ Almacenamiento local accesible")
             else:
-                print("❌ Error conectando a Firebase")
+                print("❌ Error accediendo al almacenamiento")
         else:
             print("Comandos disponibles:")
             print("  password     - Generar hash de contraseña")
             print("  cleanup [días] - Limpiar logs antiguos")
-            print("  test-firebase - Verificar conexión Firebase")
+            print("  test-storage - Verificar almacenamiento local")
     else:
         # Comportamiento por defecto: generar contraseña
         AdminPasswordManager.create_password_hash()

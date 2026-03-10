@@ -6,7 +6,7 @@ Procesa y coordina el flujo de datos entre el portal, Firebase y el sistema de m
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-from .firebase_manager import FirebaseManager
+from .obsidian_manager import ObsidianManager
 from .student_scheduler import StudentScheduler
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ class DataProcessor:
     
     def __init__(self):
         """Inicializar el procesador de datos"""
-        self.firebase = FirebaseManager()
+        self.firebase = ObsidianManager()
         self.scheduler = StudentScheduler()
         self.logger = logging.getLogger('data_processor')
     
