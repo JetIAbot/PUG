@@ -1,6 +1,6 @@
 """
 Configuración centralizada para PUG (Portal University Grouper)
-Sistema de agrupación de estudiantes universitarios para viajes compartidos
+Sistema CLI de agrupación de estudiantes universitarios para viajes compartidos
 """
 
 import os
@@ -11,20 +11,15 @@ load_dotenv()
 
 class Config:
     """Configuración base"""
-    # Flask
-    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-change-in-production')
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
     
     # Firebase
-    FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', 'credenciales.json')
+    FIREBASE_CREDENTIALS_PATH = os.getenv('FIREBASE_CREDENTIALS_PATH', 'firebase.json')
     
     # Portal Universitario
     USE_REAL_PORTAL = os.getenv('USE_REAL_PORTAL', 'False').lower() == 'true'
     PORTAL_URL = os.getenv('PORTAL_URL', 'https://segreteria.unigre.it')
-    
-    # Celery (para tareas asíncronas)
-    CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-    CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+    HEADLESS_MODE = os.getenv('HEADLESS_MODE', 'True').lower() == 'true'
     
     # Logging
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -32,12 +27,12 @@ class Config:
     LOG_MAX_DAYS = int(os.getenv('LOG_MAX_DAYS', '7'))
     
     # Seguridad
-    SESSION_TIMEOUT = int(os.getenv('SESSION_TIMEOUT', '3600'))  # 1 hora
-    MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '3'))
+    MASK_CREDENTIALS = os.getenv('MASK_CREDENTIALS', 'True').lower() == 'true'
+    LOG_SENSITIVE_DATA = os.getenv('LOG_SENSITIVE_DATA', 'False').lower() == 'true'
     
     # Demo/Desarrollo
     DEMO_MODE = os.getenv('DEMO_MODE', 'True').lower() == 'true'
-    
+
 class DevelopmentConfig(Config):
     """Configuración para desarrollo"""
     DEBUG = True
@@ -63,5 +58,5 @@ config = {
 
 def get_config():
     """Obtener configuración según el entorno"""
-    env = os.getenv('FLASK_ENV', 'development')
+    env = os.getenv('APP_ENV', 'development')
     return config.get(env, config['default'])

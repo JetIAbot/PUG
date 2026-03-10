@@ -170,16 +170,4 @@ VALIDATION_RULES = {
     }
 }
 
-# --- CONFIGURACIÓN DE CELERY ---
-CELERY_TASK_ROUTES = {
-    'app.procesar_estudiante_async': {'queue': 'main'},
-    'app.cleanup_old_data': {'queue': 'maintenance'}
-}
-
-CELERY_BEAT_SCHEDULE = {
-    'cleanup-logs': {
-        'task': 'app.cleanup_old_logs',
-        'schedule': 86400.0,  # 24 horas
-    },
-}
 HORARIO_TABLA_SEMESTRE_2 = ("id", "gvOrario2") # Ejemplo: Tabla del segundo semestre

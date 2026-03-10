@@ -398,7 +398,7 @@ class ViajeManager:
                 }
             
             # Obtener carros disponibles
-            carros_disponibles = self.car_manager.listar_carros({'estado': 'disponible'})
+            carros_disponibles = self.car_manager.obtener_todos_carros({'estado': 'disponible'})
             
             if not carros_disponibles:
                 return {

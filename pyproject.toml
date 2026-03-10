@@ -1,0 +1,11 @@
+[project]
+name = "pug"
+version = "1.0.0"
+description = "Portal University Grouper - Sistema CLI para agrupar estudiantes en viajes compartidos"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

@@ -4,6 +4,7 @@
 # ========================================
 
 # --- CRÍTICO: Archivos con datos sensibles y personales ---
+firebase.json
 credenciales*.json
 *credentials*.json
 *.pem

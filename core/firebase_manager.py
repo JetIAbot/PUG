@@ -28,7 +28,7 @@ class FirebaseManager:
         """
         self.credentials_path = credentials_path or os.getenv(
             'FIREBASE_CREDENTIALS_PATH', 
-            'credenciales.json'
+            'firebase.json'
         )
         self.db = None
         self.logger = logging.getLogger('firebase_manager')

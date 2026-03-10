@@ -210,10 +210,11 @@ def listar_carros():
         carros = cm.obtener_todos_carros(filtros)
         _tabla_carros(carros)
         stats = cm.obtener_estadisticas()
-        print(f"\n  {C.DIM}Total: {stats.get('total',0)} | "
-              f"Disponibles: {stats.get('disponibles',0)} | "
-              f"En uso: {stats.get('en_uso',0)} | "
-              f"Mantenimiento: {stats.get('mantenimiento',0)}{C.RESET}")
+        por_estado = stats.get('por_estado', {})
+        print(f"\n  {C.DIM}Total: {stats.get('total_carros',0)} | "
+              f"Disponibles: {por_estado.get('disponible',0)} | "
+              f"En uso: {por_estado.get('en_uso',0)} | "
+              f"Mantenimiento: {por_estado.get('mantenimiento',0)}{C.RESET}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -414,9 +415,10 @@ def listar_estudiantes():
         estudiantes = sm.listar_estudiantes(filtros if filtros else None)
         _tabla_estudiantes(estudiantes)
         stats = sm.obtener_estadisticas()
-        print(f"\n  {C.DIM}Total: {stats.get('total',0)} | "
-              f"Conductores: {stats.get('conductores',0)} | "
-              f"Viajan hoy: {stats.get('viajan_hoy',0)}{C.RESET}")
+        resumen = stats.get('resumen', {})
+        print(f"\n  {C.DIM}Total: {resumen.get('total_estudiantes',0)} | "
+              f"Conductores: {resumen.get('con_licencia',0)} | "
+              f"Viajan hoy: {resumen.get('viajan_hoy',0)}{C.RESET}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -968,16 +970,18 @@ def estadisticas_generales():
         viajes_hoy = get_viaje_manager().listar_viajes(fecha=date.today().isoformat())
 
         print(f"\n  {C.BOLD}CARROS{C.RESET}")
-        print(f"  Total             {stats_c.get('total',0)}")
-        print(f"  Disponibles       {stats_c.get('disponibles',0)}")
-        print(f"  En uso            {stats_c.get('en_uso',0)}")
-        print(f"  Mantenimiento     {stats_c.get('mantenimiento',0)}")
-        print(f"  Fuera de servicio {stats_c.get('fuera_servicio',0)}")
+        por_estado = stats_c.get('por_estado', {})
+        print(f"  Total             {stats_c.get('total_carros',0)}")
+        print(f"  Disponibles       {por_estado.get('disponible',0)}")
+        print(f"  En uso            {por_estado.get('en_uso',0)}")
+        print(f"  Mantenimiento     {por_estado.get('mantenimiento',0)}")
+        print(f"  Fuera de servicio {por_estado.get('fuera_de_servicio',0)}")
 
+        resumen_e = stats_e.get('resumen', {})
         print(f"\n  {C.BOLD}ESTUDIANTES{C.RESET}")
-        print(f"  Total             {stats_e.get('total',0)}")
-        print(f"  Conductores       {stats_e.get('conductores',0)}")
-        print(f"  Viajan hoy        {stats_e.get('viajan_hoy',0)}")
+        print(f"  Total             {resumen_e.get('total_estudiantes',0)}")
+        print(f"  Conductores       {resumen_e.get('con_licencia',0)}")
+        print(f"  Viajan hoy        {resumen_e.get('viajan_hoy',0)}")
 
         print(f"\n  {C.BOLD}VIAJES HOY  ({date.today().isoformat()}){C.RESET}")
         print(f"  Total             {len(viajes_hoy)}")
@@ -995,9 +999,9 @@ def probar_firebase():
             ok("Conexion a Firebase Firestore exitosa.")
         else:
             err("No se pudo obtener cliente.")
-            info("Verifica que credenciales.json existe y es valido.")
+            info("Verifica que firebase.json existe y es valido.")
     except FileNotFoundError:
-        err("Archivo credenciales.json no encontrado.")
+        err("Archivo firebase.json no encontrado.")
         info("Copia .env.example a .env y configura FIREBASE_CREDENTIALS_PATH.")
     except Exception as e:
         err(f"Error: {e}")
@@ -1113,7 +1117,7 @@ if __name__ == "__main__":
     if not verificar_conexion():
         print()
         warn("Sin conexion a Firebase el sistema tiene funcionalidad limitada.")
-        warn("Verifica credenciales.json y el archivo .env.")
+        warn("Verifica firebase.json y el archivo .env.")
         if not pedir_confirmacion("Continuar de todas formas?"):
             sys.exit(1)
 
