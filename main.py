@@ -528,28 +528,60 @@ def registrar_via_portal():
         return
     matricola = pedir("Matricola universitaria")
     password  = pedir("Contrasena del portal")
+
+    # Verificar si el estudiante ya existe
+    sm = get_student_manager()
+    existente = sm.obtener_estudiante(matricola)
+    es_actualizacion = existente is not None
+    if es_actualizacion:
+        d_prev = existente if isinstance(existente, dict) else existente.to_dict()
+        nom_prev = f"{d_prev.get('nombre', d_prev.get('nome', ''))} {d_prev.get('apellido', d_prev.get('cognome', ''))}".strip()
+        warn(f"El estudiante {nom_prev} ({matricola}) ya esta registrado.")
+        info("Se actualizaran TODOS los datos con la informacion del portal.")
+        if not pedir_confirmacion("Continuar con la actualizacion?"):
+            return
+
     info("Iniciando extraccion... (puede tardar 1-2 minutos)")
     try:
         from core.student_scheduler import StudentScheduler
         resultado = StudentScheduler().extraer_y_guardar_datos(matricola, password)
         if resultado["success"]:
-            ok("Datos extraidos y guardados.")
             data = resultado.get("data", {})
             perfil = data.get("perfil", {})
             horario = data.get("horario", [])
+
+            if es_actualizacion:
+                ok("Datos actualizados desde el portal.")
+                # Mostrar cambios detectados
+                _mostrar_cambios_portal(d_prev, perfil, horario,
+                                        d_prev.get("horario", d_prev.get("clases", [])))
+            else:
+                ok("Datos extraidos y guardados.")
+
             info(f"Estudiante: {perfil.get('nome','')} {perfil.get('cognome','')}")
             info(f"Clases encontradas: {len(horario)}")
             if horario:
                 info(f"Semestre activo: {data.get('semestre_activo', '?')}")
                 info(f"Materias: {len(data.get('materias', []))}")
 
-            # Preguntas de carpooling
-            print()
-            subtitulo("DATOS DE CARPOOLING")
-            tiene_lic = pedir_confirmacion("Tiene licencia de conducir?")
-            tipos_lic, fecha_venc = [], None
-            if tiene_lic:
-                tipos_lic, fecha_venc = _pedir_licencias()
+            # Preguntas de carpooling — preservar datos previos si es actualizacion
+            if es_actualizacion:
+                tiene_lic = d_prev.get("tiene_licencia", False)
+                tipos_lic = d_prev.get("tipos_licencia", [])
+                fecha_venc = d_prev.get("fecha_vencimiento_licencia")
+                info(f"Licencia actual: {'Si (' + ', '.join(tipos_lic) + ')' if tiene_lic else 'No'}")
+                if pedir_confirmacion("Actualizar datos de licencia?"):
+                    tiene_lic = pedir_confirmacion("Tiene licencia de conducir?")
+                    tipos_lic, fecha_venc = [], None
+                    if tiene_lic:
+                        tipos_lic, fecha_venc = _pedir_licencias()
+            else:
+                print()
+                subtitulo("DATOS DE CARPOOLING")
+                tiene_lic = pedir_confirmacion("Tiene licencia de conducir?")
+                tipos_lic, fecha_venc = [], None
+                if tiene_lic:
+                    tipos_lic, fecha_venc = _pedir_licencias()
 
             # Determinar viaja_hoy automaticamente segun horario
             viaja_hoy, dia_hoy, n_clases = _calcular_viaja_hoy(horario)
@@ -564,7 +596,7 @@ def registrar_via_portal():
                 "fecha_vencimiento_licencia": fecha_venc,
                 "viaja_hoy": viaja_hoy,
             }
-            res = get_student_manager().actualizar_estudiante(matricola, datos_extra)
+            res = sm.actualizar_estudiante(matricola, datos_extra)
             if res["success"]:
                 ok("Datos de carpooling guardados.")
             else:
@@ -574,6 +606,45 @@ def registrar_via_portal():
     except Exception as e:
         err(f"Error: {e}")
     pausar()
+
+
+def _mostrar_cambios_portal(d_prev, perfil_nuevo, horario_nuevo, horario_prev):
+    """Muestra los cambios detectados entre datos previos y nuevos del portal."""
+    cambios = []
+    # Comparar perfil
+    campos = [
+        ("Nome", d_prev.get("nome", ""), perfil_nuevo.get("nome", "")),
+        ("Cognome", d_prev.get("cognome", ""), perfil_nuevo.get("cognome", "")),
+        ("Email", d_prev.get("email", ""), perfil_nuevo.get("email", "")),
+        ("Telefono", d_prev.get("telefono", ""), perfil_nuevo.get("telefono", "")),
+    ]
+    for nombre, viejo, nuevo in campos:
+        if str(viejo).strip() != str(nuevo).strip():
+            cambios.append(f"  {nombre}: {viejo} -> {nuevo}")
+
+    # Comparar horario por cantidad
+    n_prev = len(horario_prev) if horario_prev else 0
+    n_nuevo = len(horario_nuevo) if horario_nuevo else 0
+    if n_prev != n_nuevo:
+        cambios.append(f"  Horario: {n_prev} clases -> {n_nuevo} clases")
+    else:
+        # Comparar contenido de clases
+        prev_set = {(c.get("dia",""), c.get("bloque",""), c.get("codigo","")) for c in horario_prev}
+        nuevo_set = {(c.get("dia",""), c.get("bloque",""), c.get("codigo","")) for c in horario_nuevo}
+        agregadas = nuevo_set - prev_set
+        eliminadas = prev_set - nuevo_set
+        if agregadas or eliminadas:
+            cambios.append(f"  Horario: {len(agregadas)} clases nuevas, {len(eliminadas)} eliminadas")
+
+    if cambios:
+        print()
+        print(f"  {C.BOLD}CAMBIOS DETECTADOS:{C.RESET}")
+        print(f"  {'─' * 50}")
+        for c in cambios:
+            print(f"  {C.YELLOW}{c}{C.RESET}")
+        print()
+    else:
+        info("Sin cambios detectados en perfil ni horario.")
 
 
 def ver_estudiante():
@@ -669,6 +740,7 @@ def ver_estudiante():
 
 
 def editar_estudiante():
+    limpiar()
     subtitulo("EDITAR ESTUDIANTE")
     matricola = pedir("Matricola")
     try:
@@ -681,36 +753,93 @@ def editar_estudiante():
         d = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
         nom_actual = d.get('nombre', d.get('nome', ''))
         ape_actual = d.get('apellido', d.get('cognome', ''))
-        info(f"Editando: {nom_actual} {ape_actual} ({matricola})")
-        info("Enter mantiene el valor actual.")
-        print()
-        nombre   = pedir("Nombre",   requerido=False, valor_defecto=nom_actual)
-        apellido = pedir("Apellido", requerido=False, valor_defecto=ape_actual)
-        email    = pedir("Email",    requerido=False, valor_defecto=d.get("email", ""))
-        telefono = pedir("Telefono", requerido=False, valor_defecto=d.get("telefono", ""))
 
-        tiene_lic_actual = d.get("tiene_licencia", False)
-        tiene_lic = pedir_confirmacion(
-            f"Tiene licencia? (actual: {'Si' if tiene_lic_actual else 'No'})"
-        )
-        tipos_lic  = d.get("tipos_licencia", [])
-        fecha_venc = d.get("fecha_vencimiento_licencia")
+        while True:
+            limpiar()
+            subtitulo("EDITAR ESTUDIANTE")
+            info(f"Editando: {nom_actual} {ape_actual} ({matricola})")
+            print()
+            print(f"  {C.BOLD}QUE DESEA MODIFICAR?{C.RESET}")
+            print(f"  {'─' * 40}")
+            print(f"  {C.CYAN}[1]{C.RESET} Nombre")
+            print(f"  {C.CYAN}[2]{C.RESET} Apellido")
+            print(f"  {C.CYAN}[3]{C.RESET} Email")
+            print(f"  {C.CYAN}[4]{C.RESET} Telefono")
+            print(f"  {C.CYAN}[5]{C.RESET} Licencia de conducir")
+            print(f"  {C.CYAN}[6]{C.RESET} Horario (agregar clase)")
+            print(f"  {C.CYAN}[7]{C.RESET} Horario (eliminar clase)")
+            print(f"  {C.CYAN}[0]{C.RESET} Guardar y volver")
+            print()
+            op = pedir("Opcion", requerido=False, valor_defecto="0")
 
-        if tiene_lic and pedir_confirmacion("Actualizar datos de licencia?"):
-            tipos_lic, fecha_venc = _pedir_licencias()
+            if op == "1":
+                nuevo = pedir("Nuevo nombre", requerido=False, valor_defecto=nom_actual)
+                d['nome'] = nuevo.upper()
+                d['nombre'] = nuevo.upper()
+                nom_actual = nuevo.upper()
+                ok(f"Nombre actualizado: {nom_actual}")
+                pausar()
 
-        # viaja_hoy se calcula automaticamente del horario
+            elif op == "2":
+                nuevo = pedir("Nuevo apellido", requerido=False, valor_defecto=ape_actual)
+                d['cognome'] = nuevo.upper()
+                d['apellido'] = nuevo.upper()
+                ape_actual = nuevo.upper()
+                ok(f"Apellido actualizado: {ape_actual}")
+                pausar()
+
+            elif op == "3":
+                nuevo = pedir("Nuevo email", requerido=False, valor_defecto=d.get("email", ""))
+                d['email'] = nuevo
+                ok(f"Email actualizado: {nuevo}")
+                pausar()
+
+            elif op == "4":
+                nuevo = pedir("Nuevo telefono", requerido=False, valor_defecto=d.get("telefono", ""))
+                d['telefono'] = nuevo
+                ok(f"Telefono actualizado: {nuevo}")
+                pausar()
+
+            elif op == "5":
+                tiene_lic = pedir_confirmacion("Tiene licencia de conducir?")
+                d['tiene_licencia'] = tiene_lic
+                if tiene_lic:
+                    tipos_lic, fecha_venc = _pedir_licencias()
+                    d['tipos_licencia'] = tipos_lic
+                    d['fecha_vencimiento_licencia'] = fecha_venc
+                else:
+                    d['tipos_licencia'] = []
+                    d['fecha_vencimiento_licencia'] = None
+                ok(f"Licencia actualizada: {'Si' if tiene_lic else 'No'}")
+                pausar()
+
+            elif op == "6":
+                _agregar_clase(d)
+                pausar()
+
+            elif op == "7":
+                _eliminar_clase(d)
+                pausar()
+
+            elif op == "0":
+                break
+            else:
+                warn("Opcion no valida.")
+
+        # Recalcular viaja_hoy con el horario actualizado
         horario = d.get("horario", d.get("clases", []))
         viaja_hoy, dia_hoy, n_clases = _calcular_viaja_hoy(horario)
-        if viaja_hoy:
-            info(f"Viaja hoy: Si ({n_clases} clases el {dia_hoy})")
-        else:
-            info(f"Viaja hoy: No (sin clases el {dia_hoy})")
 
         datos = {
-            "nombre": nombre, "apellido": apellido, "email": email, "telefono": telefono,
-            "tiene_licencia": tiene_lic, "tipos_licencia": tipos_lic,
-            "fecha_vencimiento_licencia": fecha_venc, "viaja_hoy": viaja_hoy,
+            "nombre": nom_actual,
+            "apellido": ape_actual,
+            "email": d.get("email", ""),
+            "telefono": d.get("telefono", ""),
+            "tiene_licencia": d.get("tiene_licencia", False),
+            "tipos_licencia": d.get("tipos_licencia", []),
+            "fecha_vencimiento_licencia": d.get("fecha_vencimiento_licencia"),
+            "viaja_hoy": viaja_hoy,
+            "horario": horario,
         }
         res = sm.actualizar_estudiante(matricola, datos)
         if res["success"]:
@@ -722,6 +851,113 @@ def editar_estudiante():
     except Exception as e:
         err(f"Error: {e}")
     pausar()
+
+
+BLOQUES_VALIDOS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+
+
+def _agregar_clase(d):
+    """Agregar una clase al horario del estudiante."""
+    print()
+    subtitulo("AGREGAR CLASE")
+    info("Ingrese los datos de la nueva clase.")
+    info(f"Dias validos: {', '.join(DIAS_SEMANA_IT)}")
+    info(f"Bloques validos: {', '.join(BLOQUES_VALIDOS)}")
+    print()
+
+    dia = pedir("Dia (en italiano, ej: Lunedi)").strip()
+    # Normalizar acento: aceptar "Lunedi" como "Lunedì"
+    dia_norm = _normalizar_dia(dia)
+    if not dia_norm:
+        err(f"Dia no valido: '{dia}'. Use: {', '.join(DIAS_SEMANA_IT)}")
+        return
+
+    bloque = pedir("Bloque (numero romano, ej: II)").strip().upper()
+    if bloque not in BLOQUES_VALIDOS:
+        err(f"Bloque no valido: '{bloque}'. Use: {', '.join(BLOQUES_VALIDOS)}")
+        return
+
+    codigo = pedir("Codigo de la clase (ej: TP1011)").strip().upper()
+    materia = pedir("Nombre de la materia").strip().upper()
+    profesor = pedir("Profesor (opcional)", requerido=False, valor_defecto="").strip()
+    aula = pedir("Aula (opcional, ej: Aula: C208 Piano: 2)", requerido=False, valor_defecto="").strip()
+
+    horario = d.get("horario", d.get("clases", []))
+
+    # Verificar si ya existe una clase en ese dia y bloque
+    for c in horario:
+        if c.get("dia") == dia_norm and c.get("bloque") == bloque:
+            err(f"Ya existe una clase en {dia_norm} bloque {bloque}: {c.get('codigo','')} {c.get('materia','')}")
+            return
+
+    nueva_clase = {
+        "codigo": codigo,
+        "materia": materia,
+        "profesor": profesor,
+        "dia": dia_norm,
+        "bloque": bloque,
+        "aula": aula,
+        "info_clase": f"{materia} - {profesor}" if profesor else materia,
+    }
+    horario.append(nueva_clase)
+    d["horario"] = horario
+    ok(f"Clase agregada: {codigo} {materia} - {dia_norm} bloque {bloque}")
+
+
+def _eliminar_clase(d):
+    """Eliminar una clase del horario del estudiante."""
+    horario = d.get("horario", d.get("clases", []))
+    if not horario:
+        warn("El estudiante no tiene clases registradas.")
+        return
+
+    print()
+    subtitulo("ELIMINAR CLASE")
+    # Mostrar horario actual
+    print(f"  {C.BOLD}{'BLQ':<6} {'DIA':<12} {'CODIGO':<10} {'MATERIA'}{C.RESET}")
+    print(f"  {'─' * 55}")
+    for c in sorted(horario, key=lambda x: (x.get("dia", ""), x.get("bloque", ""))):
+        print(f"  {c.get('bloque',''):<6} {c.get('dia',''):<12} {c.get('codigo',''):<10} {c.get('materia','')}")
+    print()
+
+    dia = pedir("Dia de la clase a eliminar (en italiano)").strip()
+    dia_norm = _normalizar_dia(dia)
+    if not dia_norm:
+        err(f"Dia no valido: '{dia}'. Use: {', '.join(DIAS_SEMANA_IT)}")
+        return
+
+    bloque = pedir("Bloque (numero romano)").strip().upper()
+    codigo = pedir("Codigo de la clase").strip().upper()
+
+    idx_eliminar = None
+    for i, c in enumerate(horario):
+        if c.get("dia") == dia_norm and c.get("bloque") == bloque and c.get("codigo", "").upper() == codigo:
+            idx_eliminar = i
+            break
+
+    if idx_eliminar is None:
+        err(f"No se encontro clase con dia={dia_norm}, bloque={bloque}, codigo={codigo}")
+        return
+
+    clase_elim = horario[idx_eliminar]
+    if pedir_confirmacion(f"Eliminar {clase_elim.get('codigo','')} {clase_elim.get('materia','')} ({dia_norm} {bloque})?"):
+        horario.pop(idx_eliminar)
+        d["horario"] = horario
+        ok(f"Clase eliminada: {clase_elim.get('codigo','')} {clase_elim.get('materia','')}")
+    else:
+        info("Eliminacion cancelada.")
+
+
+def _normalizar_dia(dia_input):
+    """Normaliza un dia ingresado al formato italiano con acento."""
+    mapa = {
+        "lunedi": "Lunedì", "lunedì": "Lunedì",
+        "martedi": "Martedì", "martedì": "Martedì",
+        "mercoledi": "Mercoledì", "mercoledì": "Mercoledì",
+        "giovedi": "Giovedì", "giovedì": "Giovedì",
+        "venerdi": "Venerdì", "venerdì": "Venerdì",
+    }
+    return mapa.get(dia_input.lower().strip())
 
 
 def marcar_disponibilidad():

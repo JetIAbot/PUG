@@ -47,6 +47,29 @@ class StudentScheduler:
                 logger.warning(f"Error en extracción del portal: {resultado_portal['message']}")
                 return resultado_portal
             
+            # Validar que los datos extraídos sean reales (no vacíos)
+            raw_data = resultado_portal.get('data', {})
+            if not raw_data:
+                return {
+                    'success': False,
+                    'message': 'El portal no devolvió datos. Verifique sus credenciales.',
+                    'data': None
+                }
+            student_info = raw_data.get('student_info', {})
+            if not student_info or not student_info.get('nome') or not student_info.get('cognome'):
+                return {
+                    'success': False,
+                    'message': 'No se pudieron extraer datos del estudiante. Credenciales incorrectas o perfil no disponible.',
+                    'data': None
+                }
+            schedule = raw_data.get('schedule', [])
+            if not schedule:
+                return {
+                    'success': False,
+                    'message': 'Perfil encontrado pero sin horario publicado. Intente cuando el horario esté disponible.',
+                    'data': None
+                }
+            
             # Procesar y estructurar datos
             datos_procesados = self._procesar_datos_portal(resultado_portal['data'], matricola)
             
@@ -103,10 +126,10 @@ class StudentScheduler:
         if 'student_info' in raw_data and raw_data['student_info']:
             student_info = raw_data['student_info']
             processed['perfil'].update({
-                'nome': student_info.get('nome', 'Usuario'),
-                'cognome': student_info.get('cognome', 'Universitario'),
-                'email': student_info.get('email', f'{matricola}@unigre.it'),
-                'telefono': student_info.get('telefono', 'No disponible')
+                'nome': student_info.get('nome', ''),
+                'cognome': student_info.get('cognome', ''),
+                'email': student_info.get('email', ''),
+                'telefono': student_info.get('telefono', '')
             })
         
         # Procesar horario — filtrar solo el semestre activo
@@ -131,15 +154,15 @@ class StudentScheduler:
             processed['estado_horarios'] = 'disponible'
             logger.info(f"Horarios procesados: {len(processed['horario'])} clases")
         else:
-            processed['horario'] = self.demo_generator.generar_horario_demo()
-            processed['estado_horarios'] = 'ejemplo_demo'
-            logger.warning("Horarios no disponibles - usando datos de ejemplo")
+            processed['horario'] = []
+            processed['estado_horarios'] = 'no_disponible'
+            logger.warning("Horarios no disponibles en el portal")
         
         # Procesar materias
         if 'courses' in raw_data and raw_data['courses']:
             processed['materias'] = raw_data['courses']
         else:
-            processed['materias'] = self.demo_generator.generar_materias_demo()
+            processed['materias'] = []
         
         # Procesar calificaciones si existen
         if 'grades' in raw_data:
