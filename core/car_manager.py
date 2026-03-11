@@ -40,15 +40,16 @@ class CarManager:
                 }
             
             # Verificar que no exista un carro con la misma placa
-            if self._existe_placa(carro_data['placa']):
+            placa_norm = carro_data['placa'].strip().upper()
+            if self._existe_placa(placa_norm):
                 return {
                     'success': False,
                     'message': 'Ya existe un carro con esa placa',
                     'errors': ['Placa duplicada']
                 }
             
-            # Generar ID único
-            id_carro = self._generar_id_carro()
+            # Usar placa normalizada como ID del documento
+            id_carro = placa_norm
             
             # Crear objeto Carro
             carro = Carro(
@@ -419,36 +420,11 @@ class CarManager:
     
     def _existe_placa(self, placa: str, excluir_id: str = None) -> bool:
         """
-        Verificar si ya existe un carro con la placa dada
-        
-        Args:
-            placa: Placa a verificar
-            excluir_id: ID a excluir de la búsqueda (para actualizaciones)
-            
-        Returns:
-            bool: True si existe, False si no
+        Verificar si ya existe un carro con la placa dada.
+        Como la placa es el ID del documento, basta con verificar si existe.
         """
-        try:
-            query = self.db.collection(self.collection_name).where('placa', '==', placa.upper())
-            docs = query.stream()
-            
-            for doc in docs:
-                if excluir_id and doc.id == excluir_id:
-                    continue
-                return True
-            
+        placa_norm = placa.strip().upper()
+        if excluir_id and placa_norm == excluir_id:
             return False
-            
-        except Exception as e:
-            logger.error(f"Error verificando placa {placa}: {e}")
-            return False
-    
-    def _generar_id_carro(self) -> str:
-        """
-        Generar un ID único para un carro
-        
-        Returns:
-            str: ID único
-        """
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return f"carro_{timestamp}"
+        doc = self.db.collection(self.collection_name).document(placa_norm).get()
+        return doc.exists

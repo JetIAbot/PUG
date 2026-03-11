@@ -145,13 +145,22 @@ class MarkdownCollection:
     def __init__(self, path: Path):
         self.path = path
         self._order_field: Optional[str] = None
+        self._filters: List[tuple] = []
 
     def document(self, doc_id: str) -> MarkdownDocument:
         return MarkdownDocument(self.path / f"{doc_id}.md", doc_id)
 
+    def where(self, field: str, op: str, value) -> "MarkdownCollection":
+        """Filtrar documentos por campo. Soporta operador '=='."""
+        clone = MarkdownCollection(self.path)
+        clone._order_field = self._order_field
+        clone._filters = self._filters + [(field, op, value)]
+        return clone
+
     def order_by(self, field: str) -> "MarkdownCollection":
         clone = MarkdownCollection(self.path)
         clone._order_field = field
+        clone._filters = list(self._filters)
         return clone
 
     def stream(self) -> Iterator[MarkdownSnapshot]:
@@ -163,6 +172,16 @@ class MarkdownCollection:
             doc_id = f.stem
             data = _read_frontmatter(f)
             if data is not None:
+                # Aplicar filtros
+                if self._filters:
+                    skip = False
+                    for field, op, value in self._filters:
+                        doc_val = data.get(field)
+                        if op == "==" and doc_val != value:
+                            skip = True
+                            break
+                    if skip:
+                        continue
                 ref = MarkdownDocument(f, doc_id)
                 docs.append(MarkdownSnapshot(doc_id, ref, data))
         if self._order_field and docs:

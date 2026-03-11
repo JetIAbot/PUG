@@ -178,9 +178,9 @@ def _tabla_carros(carros):
     if not carros:
         warn("No se encontraron carros.")
         return
-    fmt = "  {:<22} {:<22} {:<12} {:<12} {:<5} {}"
-    print(f"\n{C.BOLD}" + fmt.format("ID", "MARCA / MODELO", "PLACA", "TIPO", "CAP", "ESTADO") + C.RESET)
-    print("  " + "─" * 85)
+    fmt = "  {:<12} {:<25} {:<12} {:<5} {}"
+    print(f"\n{C.BOLD}" + fmt.format("PLACA", "MARCA / MODELO", "TIPO", "CAP", "ESTADO") + C.RESET)
+    print("  " + "─" * 65)
     for c in carros:
         d = c if isinstance(c, dict) else c.to_dict()
         estado = d.get("estado", "")
@@ -189,9 +189,8 @@ def _tabla_carros(carros):
                  else C.RED)
         nombre = f"{d.get('marca','')} {d.get('modelo','')}".strip()
         print(fmt.format(
-            d.get("id_carro", "")[:21],
-            nombre[:21],
             d.get("placa", "")[:11],
+            nombre[:24],
             d.get("tipo_carro", "")[:11],
             str(d.get("capacidad_pasajeros", "")),
             f"{color}{estado}{C.RESET}"
@@ -206,7 +205,7 @@ def listar_carros():
             "Filtrar por estado [disponible/en_uso/mantenimiento/fuera_servicio] o Enter para todos",
             requerido=False, valor_defecto=""
         )
-        filtros = {"estado": estado} if estado else {}
+        filtros = {"estado": estado} if estado else None
         carros = cm.obtener_todos_carros(filtros)
         _tabla_carros(carros)
         stats = cm.obtener_estadisticas()
@@ -224,10 +223,10 @@ def crear_carro():
     subtitulo("AGREGAR CARRO")
     from core.models import TipoCarro, TipoCombustible
     try:
+        placa     = pedir("Placa (ej: AB123CD)").strip().upper()
         marca     = pedir("Marca")
         modelo    = pedir("Modelo")
-        anio      = pedir("Ano (ej: 2019)")
-        placa     = pedir("Placa (ej: AB123CD)")
+        anio      = pedir("Año (ej: 2019)")
 
         print(f"\n  {C.CYAN}Tipo de carro:{C.RESET}")
         tipo = pedir_opcion([t.value for t in TipoCarro], "Tipo")
@@ -239,7 +238,7 @@ def crear_carro():
         obs = pedir("Observaciones", requerido=False, valor_defecto="")
 
         datos = {
-            "marca": marca, "modelo": modelo, "ano": anio, "placa": placa,
+            "marca": marca, "modelo": modelo, "año": anio, "placa": placa,
             "tipo_carro": tipo, "tipo_combustible": combustible,
             "capacidad_pasajeros": capacidad, "observaciones": obs,
         }
@@ -257,49 +256,102 @@ def crear_carro():
 
 def ver_carro():
     subtitulo("DETALLE DE CARRO")
-    id_carro = pedir("ID del carro")
+    placa = pedir("Placa del carro").strip().upper()
     try:
-        carro = get_car_manager().obtener_carro(id_carro)
+        carro = get_car_manager().obtener_carro(placa)
         if not carro:
             err("Carro no encontrado.")
         else:
             d = carro if isinstance(carro, dict) else carro.to_dict()
+            estado = d.get("estado", "")
+            color_est = (C.GREEN if estado == "disponible"
+                         else C.YELLOW if estado == "en_uso"
+                         else C.RED)
             print()
-            for k, v in d.items():
-                print(f"  {C.CYAN}{k:<30}{C.RESET} {v}")
+            print(f"  {C.BOLD}{d.get('marca','')} {d.get('modelo','')} ({d.get('año','')}){C.RESET}")
+            print(f"  {'─' * 40}")
+            print(f"  {C.CYAN}{'Placa':<25}{C.RESET} {d.get('placa','')}")
+            print(f"  {C.CYAN}{'Tipo':<25}{C.RESET} {d.get('tipo_carro','')}")
+            print(f"  {C.CYAN}{'Combustible':<25}{C.RESET} {d.get('tipo_combustible','')}")
+            print(f"  {C.CYAN}{'Capacidad pasajeros':<25}{C.RESET} {d.get('capacidad_pasajeros','')}")
+            print(f"  {C.CYAN}{'Estado':<25}{C.RESET} {color_est}{estado}{C.RESET}")
+            obs = d.get("observaciones", "")
+            if obs:
+                print(f"  {C.CYAN}{'Observaciones':<25}{C.RESET} {obs}")
+            print(f"  {C.CYAN}{'Creado':<25}{C.RESET} {d.get('fecha_creacion','')}")
+            print(f"  {C.CYAN}{'Actualizado':<25}{C.RESET} {d.get('fecha_actualizacion','')}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
 
 
 def editar_carro():
+    limpiar()
     subtitulo("EDITAR CARRO")
-    id_carro = pedir("ID del carro")
+    placa_id = pedir("Placa del carro").strip().upper()
     try:
         cm = get_car_manager()
-        carro = cm.obtener_carro(id_carro)
+        carro = cm.obtener_carro(placa_id)
         if not carro:
             err("Carro no encontrado.")
             pausar()
             return
         d = carro if isinstance(carro, dict) else carro.to_dict()
-        info(f"Editando: {d.get('marca')} {d.get('modelo')} - {d.get('placa')}")
-        info("Dejar en blanco mantiene el valor actual.")
-        print()
-        marca     = pedir("Marca",      requerido=False, valor_defecto=d.get("marca", ""))
-        modelo    = pedir("Modelo",     requerido=False, valor_defecto=d.get("modelo", ""))
-        anio      = pedir("Ano",        requerido=False, valor_defecto=str(d.get("ano", d.get("año", ""))))
-        placa     = pedir("Placa",      requerido=False, valor_defecto=d.get("placa", ""))
-        capacidad = pedir("Capacidad",  requerido=False, valor_defecto=str(d.get("capacidad_pasajeros", "")))
-        obs       = pedir("Observaciones", requerido=False, valor_defecto=d.get("observaciones", ""))
+
+        while True:
+            limpiar()
+            subtitulo("EDITAR CARRO")
+            info(f"Editando: {d.get('marca')} {d.get('modelo')} - {d.get('placa')}")
+            print()
+            print(f"  {C.BOLD}QUE DESEA MODIFICAR?{C.RESET}")
+            print(f"  {'─' * 40}")
+            print(f"  {C.CYAN}[1]{C.RESET} Marca         [{d.get('marca','')}]")
+            print(f"  {C.CYAN}[2]{C.RESET} Modelo        [{d.get('modelo','')}]")
+            print(f"  {C.CYAN}[3]{C.RESET} Año           [{d.get('año','')}]")
+            print(f"  {C.CYAN}[4]{C.RESET} Capacidad     [{d.get('capacidad_pasajeros','')}]")
+            print(f"  {C.CYAN}[5]{C.RESET} Observaciones [{d.get('observaciones','')[:30]}]")
+            print(f"  {C.CYAN}[0]{C.RESET} Guardar y volver")
+            print()
+            op = pedir("Opcion", requerido=False, valor_defecto="0")
+
+            if op == "1":
+                nuevo = pedir("Nueva marca", requerido=False, valor_defecto=d.get("marca", ""))
+                d['marca'] = nuevo
+                ok(f"Marca actualizada: {nuevo}")
+                pausar()
+            elif op == "2":
+                nuevo = pedir("Nuevo modelo", requerido=False, valor_defecto=d.get("modelo", ""))
+                d['modelo'] = nuevo
+                ok(f"Modelo actualizado: {nuevo}")
+                pausar()
+            elif op == "3":
+                nuevo = pedir("Nuevo año", requerido=False, valor_defecto=str(d.get("año", "")))
+                d['año'] = int(nuevo)
+                ok(f"Año actualizado: {nuevo}")
+                pausar()
+            elif op == "4":
+                nuevo = pedir("Nueva capacidad", requerido=False, valor_defecto=str(d.get("capacidad_pasajeros", "")))
+                d['capacidad_pasajeros'] = int(nuevo)
+                ok(f"Capacidad actualizada: {nuevo}")
+                pausar()
+            elif op == "5":
+                nuevo = pedir("Nuevas observaciones", requerido=False, valor_defecto=d.get("observaciones", ""))
+                d['observaciones'] = nuevo
+                ok("Observaciones actualizadas.")
+                pausar()
+            elif op == "0":
+                break
+            else:
+                warn("Opcion no valida.")
 
         datos = {
-            "marca": marca, "modelo": modelo, "ano": anio, "placa": placa,
-            "tipo_carro": d.get("tipo_carro"), "tipo_combustible": d.get("tipo_combustible"),
-            "capacidad_pasajeros": capacidad, "estado": d.get("estado"),
-            "observaciones": obs,
+            "marca": d.get("marca"),
+            "modelo": d.get("modelo"),
+            "año": d.get("año"),
+            "capacidad_pasajeros": d.get("capacidad_pasajeros"),
+            "observaciones": d.get("observaciones", ""),
         }
-        res = cm.actualizar_carro(id_carro, datos)
+        res = cm.actualizar_carro(placa_id, datos)
         if res["success"]:
             ok(res["message"])
         else:
@@ -312,11 +364,19 @@ def editar_carro():
 def cambiar_estado_carro():
     subtitulo("CAMBIAR ESTADO")
     from core.models import EstadoCarro
-    id_carro = pedir("ID del carro")
+    placa = pedir("Placa del carro").strip().upper()
     try:
+        cm = get_car_manager()
+        carro = cm.obtener_carro(placa)
+        if not carro:
+            err("Carro no encontrado.")
+            pausar()
+            return
+        d = carro if isinstance(carro, dict) else carro.to_dict()
+        info(f"Carro: {d.get('marca')} {d.get('modelo')} - Estado actual: {d.get('estado')}")
         print(f"\n  {C.CYAN}Nuevo estado:{C.RESET}")
         estado_str = pedir_opcion([e.value for e in EstadoCarro], "Estado")
-        res = get_car_manager().cambiar_estado_carro(id_carro, EstadoCarro(estado_str))
+        res = cm.cambiar_estado_carro(placa, EstadoCarro(estado_str))
         if res["success"]:
             ok(res["message"])
         else:
@@ -328,10 +388,10 @@ def cambiar_estado_carro():
 
 def eliminar_carro():
     subtitulo("ELIMINAR CARRO")
-    id_carro = pedir("ID del carro")
+    placa = pedir("Placa del carro").strip().upper()
     try:
         cm = get_car_manager()
-        carro = cm.obtener_carro(id_carro)
+        carro = cm.obtener_carro(placa)
         if not carro:
             err("Carro no encontrado.")
             pausar()
@@ -339,7 +399,7 @@ def eliminar_carro():
         d = carro if isinstance(carro, dict) else carro.to_dict()
         warn(f"Eliminar: {d.get('marca')} {d.get('modelo')} - {d.get('placa')}")
         if pedir_confirmacion("Confirmar eliminacion"):
-            res = cm.eliminar_carro(id_carro)
+            res = cm.eliminar_carro(placa)
             ok(res["message"]) if res["success"] else err(res["message"])
         else:
             info("Cancelado.")
@@ -1149,15 +1209,15 @@ def crear_viaje():
         print(f"\n  {C.CYAN}Carros disponibles:{C.RESET}")
         for c in carros_disp:
             d = c if isinstance(c, dict) else c.to_dict()
-            print(f"  {C.DIM}  {d.get('id_carro',''):<24} "
-                  f"{d.get('marca','')} {d.get('modelo','')} - {d.get('placa','')} "
+            print(f"  {C.DIM}  {d.get('placa',''):<12} "
+                  f"{d.get('marca','')} {d.get('modelo','')} "
                   f"(cap: {d.get('capacidad_pasajeros','')}){C.RESET}")
-        id_carro = pedir("ID del carro")
+        placa_carro = pedir("Placa del carro").strip().upper()
         obs      = pedir("Observaciones", requerido=False, valor_defecto="")
 
         datos = {
             "fecha": fecha, "hora_salida": hora, "origen": origen, "destino": destino,
-            "matricola_conductor": matricola_conductor, "id_carro": id_carro,
+            "matricola_conductor": matricola_conductor, "id_carro": placa_carro,
             "pasajeros": [], "observaciones": obs,
         }
         res = get_viaje_manager().crear_viaje(datos)
