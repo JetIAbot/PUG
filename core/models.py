@@ -17,6 +17,12 @@ class EstadoCarro(Enum):
     MANTENIMIENTO = "mantenimiento"
     FUERA_SERVICIO = "fuera_servicio"
 
+
+class PertenenciaCarro(Enum):
+    """Tipo de pertenencia del carro"""
+    INSTITUCIONAL = "institucional"
+    PARTICULAR = "particular"
+
 class TipoCombustible(Enum):
     """Tipos de combustible según normativa italiana"""
     GASOLINA = "gasolina"
@@ -97,6 +103,10 @@ class Carro:
                  tipo_combustible: TipoCombustible,
                  capacidad_pasajeros: int,
                  estado: EstadoCarro = EstadoCarro.DISPONIBLE,
+                 pertenencia: PertenenciaCarro = PertenenciaCarro.INSTITUCIONAL,
+                 licencias_requeridas: List[str] = None,
+                 conductor_matricola: str = "",
+                 viajes_particulares: List[Dict[str, Any]] = None,
                  observaciones: str = "",
                  fecha_creacion: datetime = None):
         
@@ -109,6 +119,13 @@ class Carro:
         self.tipo_combustible = tipo_combustible
         self.capacidad_pasajeros = capacidad_pasajeros
         self.estado = estado
+        self.pertenencia = pertenencia if isinstance(pertenencia, PertenenciaCarro) else PertenenciaCarro(str(pertenencia).strip().lower())
+        self.licencias_requeridas = [
+            lic.value if hasattr(lic, "value") else str(lic).upper()
+            for lic in (licencias_requeridas or [])
+        ]
+        self.conductor_matricola = conductor_matricola
+        self.viajes_particulares = viajes_particulares or []
         self.observaciones = observaciones
         self.fecha_creacion = fecha_creacion or datetime.now()
         self.fecha_actualizacion = datetime.now()
@@ -125,10 +142,29 @@ class Carro:
     
     def puede_ser_conducido_por(self, licencias: List[TipoLicencia]) -> bool:
         """Verificar si el carro puede ser conducido con las licencias dadas"""
+        requeridas = self.licencias_requeridas or [lic.value for lic in self.licencias_sugeridas()]
+        if requeridas:
+            for licencia in licencias:
+                if hasattr(licencia, "value"):
+                    codigo = licencia.value
+                else:
+                    codigo = str(licencia).upper()
+                if codigo in requeridas:
+                    return True
+            return False
+
         for licencia in licencias:
             if self.tipo_carro in MATRIZ_LICENCIA_CARRO.get(licencia, []):
                 return True
         return False
+
+    def licencias_sugeridas(self) -> List[TipoLicencia]:
+        """Obtener las licencias sugeridas según el tipo de carro."""
+        licencias: List[TipoLicencia] = []
+        for licencia, tipos in MATRIZ_LICENCIA_CARRO.items():
+            if self.tipo_carro in tipos:
+                licencias.append(licencia)
+        return licencias
     
     def to_dict(self) -> Dict[str, Any]:
         """Convertir a diccionario para Firebase"""
@@ -142,6 +178,10 @@ class Carro:
             'tipo_combustible': self.tipo_combustible.value,
             'capacidad_pasajeros': self.capacidad_pasajeros,
             'estado': self.estado.value,
+            'pertenencia': self.pertenencia.value,
+            'licencias_requeridas': self.licencias_requeridas,
+            'conductor_matricola': self.conductor_matricola,
+            'viajes_particulares': self.viajes_particulares,
             'observaciones': self.observaciones,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat()
@@ -160,6 +200,10 @@ class Carro:
             tipo_combustible=TipoCombustible(data['tipo_combustible']),
             capacidad_pasajeros=data['capacidad_pasajeros'],
             estado=EstadoCarro(data.get('estado', 'disponible')),
+            pertenencia=PertenenciaCarro(data.get('pertenencia', PertenenciaCarro.INSTITUCIONAL.value)),
+            licencias_requeridas=data.get('licencias_requeridas', []),
+            conductor_matricola=data.get('conductor_matricola', ''),
+            viajes_particulares=data.get('viajes_particulares', []),
             observaciones=data.get('observaciones', ''),
             fecha_creacion=datetime.fromisoformat(data.get('fecha_creacion', datetime.now().isoformat()))
         )

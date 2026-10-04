@@ -1,10 +1,45 @@
 # PUG - Portal University Grouper
 
-Sistema de carpooling para estudiantes universitarios de la Pontificia Universita Gregoriana (Roma). Gestiona estudiantes, horarios extraidos automaticamente del portal universitario, y organiza viajes compartidos semanales.
+Sistema de carpooling para estudiantes universitarios de la Pontificia Università Gregoriana (Roma). Gestiona estudiantes, horarios extraídos automáticamente del portal universitario y organiza viajes compartidos semanales.
+
+## Estado actual del proyecto
+
+La extracción de datos del portal universitario fue validada en una prueba individual:
+
+- Microsoft Edge inicia correctamente mediante Selenium.
+- El portal `segreteria.unigre.it` carga correctamente.
+- El registro de un estudiante desde el portal captura y guarda sus datos y horario.
+- La persistencia local en archivos Markdown/YAML funciona con los datos de `datos/`.
+
+Desde el menú **Sistema / Configuración > Estado del proyecto** se puede consultar este estado directamente en la CLI.
+
+### Funciones operativas y verificadas
+
+- Extracción de perfil y horario desde el portal universitario.
+- Detección del semestre activo.
+- Guardado y lectura de estudiantes en Markdown con YAML frontmatter.
+- Gestión de estudiantes y actualización de disponibilidad.
+- Selenium con Microsoft Edge en modo headless.
+
+### Funciones implementadas pendientes de validación completa
+
+- CRUD de carros, estados y compatibilidad de licencias.
+- Creación manual y asignación automática de viajes.
+- Listas diarias de viajes y planificación de rutas.
+- Exportación de rutas a PDF.
+- Estadísticas, logging y herramientas administrativas.
+
+### Funciones aún en desarrollo
+
+- Interfaz web: la aplicación actual es exclusivamente CLI.
+- Extracción específica de calificaciones del portal.
+- Comparación automática de fechas de datos extraídos.
+- Impedir la eliminación de carros que tengan viajes activos.
+- Registrar el usuario real que crea una lista diaria.
 
 ## Caracteristicas
 
-- Extraccion automatizada de horarios desde el portal universitario (Selenium + Chrome)
+- Extraccion automatizada de horarios desde el portal universitario (Selenium + Microsoft Edge)
 - Deteccion automatica de semestre activo (1ro o 2do)
 - Registro manual o via portal de estudiantes
 - Calculo automatico de disponibilidad semanal segun horario
@@ -18,7 +53,7 @@ Sistema de carpooling para estudiantes universitarios de la Pontificia Universit
 ## Tecnologias
 
 - **Python** 3.12+
-- **Selenium WebDriver** + ChromeDriver (extraccion del portal)
+- **Selenium WebDriver** + Selenium Manager para Edge (extraccion del portal)
 - **PyYAML** (almacenamiento Markdown con YAML frontmatter)
 - **Werkzeug** (hashing de contrasenas admin)
 - **python-dotenv** (configuracion por entorno)
@@ -87,8 +122,9 @@ LOG_LEVEL=INFO
 
 ### Requisitos adicionales
 
-- **Google Chrome** instalado (para extraccion del portal)
-- ChromeDriver se descarga automaticamente via `webdriver-manager`
+- **Microsoft Edge** instalado (navegador predeterminado para la extracción del portal)
+- Selenium Manager localiza Edge y gestiona `msedgedriver` automáticamente
+- Google Chrome también es compatible como alternativa configurando `BROWSER=chrome`
 
 ## Uso
 
@@ -96,14 +132,14 @@ LOG_LEVEL=INFO
 python main.py
 ```
 
-### Menu Principal
+### Menú principal
 
 ```
-[1] Gestion de Estudiantes
-[2] Gestion de Carros
-[3] Gestion de Viajes
-[4] Estadisticas Generales
-[5] Herramientas de Admin
+[1] Gestionar Carros
+[2] Gestionar Estudiantes
+[3] Gestionar Viajes
+[4] Listas Diarias
+[5] Sistema / Configuracion
 [0] Salir
 ```
 

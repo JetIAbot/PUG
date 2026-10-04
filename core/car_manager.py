@@ -6,7 +6,7 @@ CRUD completo para gestión de vehículos del sistema
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from .models import Carro, TipoCarro, TipoCombustible, EstadoCarro, TipoLicencia
+from .models import Carro, TipoCarro, TipoCombustible, EstadoCarro, TipoLicencia, PertenenciaCarro
 from .obsidian_manager import ObsidianManager
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,10 @@ class CarManager:
                 tipo_carro=TipoCarro(carro_data['tipo_carro']),
                 tipo_combustible=TipoCombustible(carro_data['tipo_combustible']),
                 capacidad_pasajeros=int(carro_data['capacidad_pasajeros']),
+                pertenencia=self._normalizar_pertenencia(carro_data.get('pertenencia')),
+                licencias_requeridas=self._normalizar_licencias_requeridas(carro_data.get('licencias_requeridas')),
+                conductor_matricola=str(carro_data.get('conductor_matricola', '')).strip(),
+                viajes_particulares=self._normalizar_viajes_particulares(carro_data.get('viajes_particulares')),
                 observaciones=carro_data.get('observaciones', '')
             )
             
@@ -177,9 +181,13 @@ class CarManager:
                     'errors': ['Carro inexistente']
                 }
             
+            id_actual = id_carro.strip().upper()
+            nueva_placa = id_actual
+
             # Si se cambia la placa, verificar que no exista otra igual
-            if 'placa' in datos_actualizacion and datos_actualizacion['placa'] != carro_actual.placa:
-                if self._existe_placa(datos_actualizacion['placa'], excluir_id=id_carro):
+            if 'placa' in datos_actualizacion and datos_actualizacion['placa']:
+                nueva_placa = str(datos_actualizacion['placa']).strip().upper()
+                if nueva_placa != id_actual and self._existe_placa(nueva_placa, excluir_id=id_actual):
                     return {
                         'success': False,
                         'message': 'Ya existe un carro con esa placa',
@@ -188,8 +196,11 @@ class CarManager:
             
             # Preparar datos para actualización
             datos_update = {}
-            campos_actualizables = ['marca', 'modelo', 'año', 'placa', 'tipo_carro', 'tipo_combustible', 
-                                  'capacidad_pasajeros', 'estado', 'observaciones']
+            campos_actualizables = [
+                'marca', 'modelo', 'año', 'placa', 'tipo_carro', 'tipo_combustible',
+                'capacidad_pasajeros', 'estado', 'pertenencia', 'licencias_requeridas',
+                'conductor_matricola', 'viajes_particulares', 'observaciones'
+            ]
             
             for campo in campos_actualizables:
                 if campo in datos_actualizacion:
@@ -202,6 +213,14 @@ class CarManager:
                         valor = TipoCombustible(valor).value
                     elif campo == 'estado' and isinstance(valor, str):
                         valor = EstadoCarro(valor).value
+                    elif campo == 'pertenencia':
+                        valor = self._normalizar_pertenencia(valor).value
+                    elif campo == 'licencias_requeridas':
+                        valor = self._normalizar_licencias_requeridas(valor)
+                    elif campo == 'conductor_matricola':
+                        valor = str(valor).strip()
+                    elif campo == 'viajes_particulares':
+                        valor = self._normalizar_viajes_particulares(valor)
                     elif campo in ['año', 'capacidad_pasajeros']:
                         valor = int(valor)
                     elif campo == 'placa':
@@ -209,17 +228,30 @@ class CarManager:
                     
                     datos_update[campo] = valor
             
+            # Asegurar consistencia entre placa e id_carro
+            datos_update['placa'] = nueva_placa
+            datos_update['id_carro'] = nueva_placa
+
             # Agregar timestamp de actualización
             datos_update['fecha_actualizacion'] = datetime.now().isoformat()
-            
-            # Actualizar en Firebase
-            doc_ref = self.db.collection(self.collection_name).document(id_carro)
-            doc_ref.update(datos_update)
-            
-            logger.info(f"Carro actualizado exitosamente: {id_carro}")
-            
-            # Obtener el carro actualizado
-            carro_actualizado = self.obtener_carro(id_carro)
+
+            # Si cambia placa, mover documento al nuevo ID
+            if nueva_placa != id_actual:
+                doc_actual = self.db.collection(self.collection_name).document(id_actual)
+                doc_nuevo = self.db.collection(self.collection_name).document(nueva_placa)
+
+                data_nueva = carro_actual.to_dict()
+                data_nueva.update(datos_update)
+
+                doc_nuevo.set(data_nueva)
+                doc_actual.delete()
+                carro_actualizado = self.obtener_carro(nueva_placa)
+                logger.info(f"Carro actualizado exitosamente: {id_actual} -> {nueva_placa}")
+            else:
+                doc_ref = self.db.collection(self.collection_name).document(id_actual)
+                doc_ref.update(datos_update)
+                carro_actualizado = self.obtener_carro(id_actual)
+                logger.info(f"Carro actualizado exitosamente: {id_actual}")
             
             return {
                 'success': True,
@@ -412,6 +444,18 @@ class CarManager:
                 TipoCombustible(datos['tipo_combustible'])
             except ValueError:
                 errores.append('Tipo de combustible inválido')
+
+        if 'pertenencia' in datos and datos['pertenencia']:
+            try:
+                self._normalizar_pertenencia(datos['pertenencia'])
+            except ValueError:
+                errores.append('Pertenencia inválida')
+
+        if 'licencias_requeridas' in datos and datos['licencias_requeridas']:
+            try:
+                self._normalizar_licencias_requeridas(datos['licencias_requeridas'])
+            except ValueError as exc:
+                errores.append(str(exc))
         
         return {
             'valid': len(errores) == 0,
@@ -428,3 +472,54 @@ class CarManager:
             return False
         doc = self.db.collection(self.collection_name).document(placa_norm).get()
         return doc.exists
+
+    def _normalizar_pertenencia(self, pertenencia: Any) -> PertenenciaCarro:
+        """Normalizar pertenencia a enum."""
+        valor = str(pertenencia or PertenenciaCarro.INSTITUCIONAL.value).strip().lower()
+        return PertenenciaCarro(valor)
+
+    def _normalizar_licencias_requeridas(self, licencias: Any) -> List[str]:
+        """Normalizar licencias requeridas a lista de códigos."""
+        if licencias is None or licencias == "":
+            return []
+        if isinstance(licencias, str):
+            items = [item.strip().upper() for item in licencias.split(',') if item.strip()]
+        elif isinstance(licencias, (list, tuple, set)):
+            items = [str(item).strip().upper() for item in licencias if str(item).strip()]
+        else:
+            raise ValueError('Licencias requeridas inválidas')
+
+        licencias_validas = {lic.value for lic in TipoLicencia}
+        for item in items:
+            if item not in licencias_validas:
+                raise ValueError(f'Licencia requerida inválida: {item}')
+        return items
+
+    def _normalizar_viajes_particulares(self, viajes: Any) -> List[Dict[str, Any]]:
+        """Normalizar definición de viajes particulares."""
+        if not viajes:
+            return []
+        if isinstance(viajes, dict):
+            viajes = [viajes]
+        if not isinstance(viajes, list):
+            raise ValueError('Viajes particulares inválidos')
+
+        normalizados = []
+        for viaje in viajes:
+            if not isinstance(viaje, dict):
+                continue
+            entry = {
+                'dia': str(viaje.get('dia', '')).strip(),
+                'tipo': str(viaje.get('tipo', 'ida_vuelta')).strip().lower(),
+                'estudiantes': [str(m).strip() for m in viaje.get('estudiantes', []) if str(m).strip()],
+                'conductor_matricola': str(viaje.get('conductor_matricola', '')).strip(),
+                'observaciones': str(viaje.get('observaciones', '')).strip(),
+            }
+            if not entry['dia']:
+                continue
+            normalizados.append(entry)
+        return normalizados
+
+    def definir_viajes_particulares(self, id_carro: str, viajes_particulares: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Actualizar las definiciones de viaje para un carro particular."""
+        return self.actualizar_carro(id_carro, {'viajes_particulares': viajes_particulares})

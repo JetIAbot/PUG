@@ -11,6 +11,8 @@ import sys
 import logging
 from datetime import datetime, date
 
+from utils.constants import ORDEN_BLOQUES
+
 # Forzar UTF-8 en Windows para caracteres especiales
 if os.name == "nt":
     os.system("chcp 65001 > NUL 2>&1")
@@ -130,6 +132,13 @@ def get_viaje_manager():
     return _managers["viaje"]
 
 
+def get_route_planner():
+    if "route_planner" not in _managers:
+        from core.daily_route_planner import DailyRoutePlanner
+        _managers["route_planner"] = DailyRoutePlanner(get_student_manager(), get_car_manager())
+    return _managers["route_planner"]
+
+
 def verificar_conexion():
     """Verificar acceso al almacenamiento local. Devuelve bool."""
     print(f"  {C.DIM}Verificando almacenamiento local...{C.RESET}", end="", flush=True)
@@ -161,6 +170,7 @@ def menu_carros():
         menu_opcion(4, "Editar carro")
         menu_opcion(5, "Cambiar estado")
         menu_opcion(6, "Eliminar carro")
+        menu_opcion(7, "Definir viajes particulares")
         menu_opcion(0, "Volver")
         print()
         op = pedir("Opcion", requerido=False, valor_defecto="0")
@@ -171,6 +181,7 @@ def menu_carros():
         elif op == "4": editar_carro()
         elif op == "5": cambiar_estado_carro()
         elif op == "6": eliminar_carro()
+        elif op == "7": definir_viajes_particulares()
         else: err("Opcion invalida.")
 
 
@@ -178,9 +189,9 @@ def _tabla_carros(carros):
     if not carros:
         warn("No se encontraron carros.")
         return
-    fmt = "  {:<12} {:<25} {:<12} {:<5} {}"
-    print(f"\n{C.BOLD}" + fmt.format("PLACA", "MARCA / MODELO", "TIPO", "CAP", "ESTADO") + C.RESET)
-    print("  " + "─" * 65)
+    fmt = "  {:<12} {:<25} {:<10} {:<12} {:<5} {}"
+    print(f"\n{C.BOLD}" + fmt.format("PLACA", "MARCA / MODELO", "PERT", "TIPO", "CAP", "ESTADO") + C.RESET)
+    print("  " + "─" * 76)
     for c in carros:
         d = c if isinstance(c, dict) else c.to_dict()
         estado = d.get("estado", "")
@@ -188,9 +199,11 @@ def _tabla_carros(carros):
                  else C.YELLOW if estado == "en_uso"
                  else C.RED)
         nombre = f"{d.get('marca','')} {d.get('modelo','')}".strip()
+        pertenencia = "INST" if d.get("pertenencia", "institucional") == "institucional" else "PART"
         print(fmt.format(
             d.get("placa", "")[:11],
             nombre[:24],
+            pertenencia,
             d.get("tipo_carro", "")[:11],
             str(d.get("capacidad_pasajeros", "")),
             f"{color}{estado}{C.RESET}"
@@ -221,7 +234,7 @@ def listar_carros():
 
 def crear_carro():
     subtitulo("AGREGAR CARRO")
-    from core.models import TipoCarro, TipoCombustible
+    from core.models import TipoCarro, TipoCombustible, PertenenciaCarro
     try:
         placa     = pedir("Placa (ej: AB123CD)").strip().upper()
         marca     = pedir("Marca")
@@ -234,13 +247,30 @@ def crear_carro():
         print(f"\n  {C.CYAN}Combustible:{C.RESET}")
         combustible = pedir_opcion([t.value for t in TipoCombustible], "Combustible")
 
+        print(f"\n  {C.CYAN}Pertenencia:{C.RESET}")
+        pertenencia = pedir_opcion([e.value for e in PertenenciaCarro], "Pertenencia")
+
+        licencias_requeridas = pedir(
+            "Licencias requeridas (coma separadas o Enter para usar la compatibilidad por tipo)",
+            requerido=False,
+            valor_defecto="",
+        ).strip().upper()
+
+        conductor_matricola = pedir(
+            "Matricola del conductor responsable (opcional)",
+            requerido=False,
+            valor_defecto="",
+        ).strip()
+
         capacidad = pedir("Capacidad de pasajeros")
         obs = pedir("Observaciones", requerido=False, valor_defecto="")
 
         datos = {
             "marca": marca, "modelo": modelo, "año": anio, "placa": placa,
             "tipo_carro": tipo, "tipo_combustible": combustible,
-            "capacidad_pasajeros": capacidad, "observaciones": obs,
+            "capacidad_pasajeros": capacidad, "pertenencia": pertenencia,
+            "licencias_requeridas": licencias_requeridas, "conductor_matricola": conductor_matricola,
+            "observaciones": obs,
         }
         res = get_car_manager().crear_carro(datos)
         if res["success"]:
@@ -271,10 +301,17 @@ def ver_carro():
             print(f"  {C.BOLD}{d.get('marca','')} {d.get('modelo','')} ({d.get('año','')}){C.RESET}")
             print(f"  {'─' * 40}")
             print(f"  {C.CYAN}{'Placa':<25}{C.RESET} {d.get('placa','')}")
+            print(f"  {C.CYAN}{'Pertenencia':<25}{C.RESET} {d.get('pertenencia','institucional')}")
             print(f"  {C.CYAN}{'Tipo':<25}{C.RESET} {d.get('tipo_carro','')}")
             print(f"  {C.CYAN}{'Combustible':<25}{C.RESET} {d.get('tipo_combustible','')}")
+            lic_req = d.get('licencias_requeridas', [])
+            print(f"  {C.CYAN}{'Licencias requeridas':<25}{C.RESET} {', '.join(lic_req) if lic_req else 'Auto por tipo'}")
+            if d.get('conductor_matricola'):
+                print(f"  {C.CYAN}{'Conductor responsable':<25}{C.RESET} {d.get('conductor_matricola')}")
             print(f"  {C.CYAN}{'Capacidad pasajeros':<25}{C.RESET} {d.get('capacidad_pasajeros','')}")
             print(f"  {C.CYAN}{'Estado':<25}{C.RESET} {color_est}{estado}{C.RESET}")
+            if d.get('viajes_particulares'):
+                print(f"  {C.CYAN}{'Viajes particulares':<25}{C.RESET} {len(d.get('viajes_particulares', []))}")
             obs = d.get("observaciones", "")
             if obs:
                 print(f"  {C.CYAN}{'Observaciones':<25}{C.RESET} {obs}")
@@ -288,8 +325,13 @@ def ver_carro():
 def editar_carro():
     limpiar()
     subtitulo("EDITAR CARRO")
-    placa_id = pedir("Placa del carro").strip().upper()
+    placa_id = pedir("Placa del carro (Enter para cancelar)", requerido=False, valor_defecto="").strip().upper()
+    if not placa_id:
+        info("Operacion cancelada.")
+        pausar()
+        return
     try:
+        from core.models import TipoCarro, TipoCombustible, EstadoCarro, PertenenciaCarro
         cm = get_car_manager()
         carro = cm.obtener_carro(placa_id)
         if not carro:
@@ -308,8 +350,14 @@ def editar_carro():
             print(f"  {C.CYAN}[1]{C.RESET} Marca         [{d.get('marca','')}]")
             print(f"  {C.CYAN}[2]{C.RESET} Modelo        [{d.get('modelo','')}]")
             print(f"  {C.CYAN}[3]{C.RESET} Año           [{d.get('año','')}]")
-            print(f"  {C.CYAN}[4]{C.RESET} Capacidad     [{d.get('capacidad_pasajeros','')}]")
-            print(f"  {C.CYAN}[5]{C.RESET} Observaciones [{d.get('observaciones','')[:30]}]")
+            print(f"  {C.CYAN}[4]{C.RESET} Placa         [{d.get('placa','')}]")
+            print(f"  {C.CYAN}[5]{C.RESET} Pertenencia   [{d.get('pertenencia','institucional')}]")
+            print(f"  {C.CYAN}[6]{C.RESET} Tipo carro    [{d.get('tipo_carro','')}]")
+            print(f"  {C.CYAN}[7]{C.RESET} Combustible   [{d.get('tipo_combustible','')}]")
+            print(f"  {C.CYAN}[8]{C.RESET} Licencias req.[{', '.join(d.get('licencias_requeridas', [])) or 'Auto por tipo'}]")
+            print(f"  {C.CYAN}[9]{C.RESET} Capacidad     [{d.get('capacidad_pasajeros','')}]")
+            print(f"  {C.CYAN}[10]{C.RESET} Conductor resp.[{d.get('conductor_matricola','')}]")
+            print(f"  {C.CYAN}[11]{C.RESET} Observaciones [{d.get('observaciones','')[:30]}]")
             print(f"  {C.CYAN}[0]{C.RESET} Guardar y volver")
             print()
             op = pedir("Opcion", requerido=False, valor_defecto="0")
@@ -330,11 +378,48 @@ def editar_carro():
                 ok(f"Año actualizado: {nuevo}")
                 pausar()
             elif op == "4":
+                nuevo = pedir("Nueva placa", requerido=False, valor_defecto=d.get("placa", "")).strip().upper()
+                d['placa'] = nuevo
+                ok(f"Placa actualizada: {nuevo}")
+                pausar()
+            elif op == "5":
+                print(f"\n  {C.CYAN}Pertenencia:{C.RESET}")
+                nuevo = pedir_opcion([e.value for e in PertenenciaCarro], "Pertenencia")
+                d['pertenencia'] = nuevo
+                ok(f"Pertenencia actualizada: {nuevo}")
+                pausar()
+            elif op == "6":
+                print(f"\n  {C.CYAN}Tipo de carro:{C.RESET}")
+                nuevo = pedir_opcion([t.value for t in TipoCarro], "Tipo")
+                d['tipo_carro'] = nuevo
+                ok(f"Tipo actualizado: {nuevo}")
+                pausar()
+            elif op == "7":
+                print(f"\n  {C.CYAN}Tipo de combustible:{C.RESET}")
+                nuevo = pedir_opcion([t.value for t in TipoCombustible], "Combustible")
+                d['tipo_combustible'] = nuevo
+                ok(f"Combustible actualizado: {nuevo}")
+                pausar()
+            elif op == "8":
+                nuevo = pedir(
+                    "Licencias requeridas (coma separadas o Enter para usar la compatibilidad por tipo)",
+                    requerido=False,
+                    valor_defecto=", ".join(d.get("licencias_requeridas", [])),
+                ).strip().upper()
+                d['licencias_requeridas'] = [x.strip().upper() for x in nuevo.split(',') if x.strip()] if nuevo else []
+                ok("Licencias requeridas actualizadas.")
+                pausar()
+            elif op == "9":
                 nuevo = pedir("Nueva capacidad", requerido=False, valor_defecto=str(d.get("capacidad_pasajeros", "")))
                 d['capacidad_pasajeros'] = int(nuevo)
                 ok(f"Capacidad actualizada: {nuevo}")
                 pausar()
-            elif op == "5":
+            elif op == "10":
+                nuevo = pedir("Matricula del conductor responsable", requerido=False, valor_defecto=d.get("conductor_matricola", "")).strip()
+                d['conductor_matricola'] = nuevo
+                ok("Conductor responsable actualizado.")
+                pausar()
+            elif op == "11":
                 nuevo = pedir("Nuevas observaciones", requerido=False, valor_defecto=d.get("observaciones", ""))
                 d['observaciones'] = nuevo
                 ok("Observaciones actualizadas.")
@@ -348,14 +433,76 @@ def editar_carro():
             "marca": d.get("marca"),
             "modelo": d.get("modelo"),
             "año": d.get("año"),
+            "placa": d.get("placa"),
+            "tipo_carro": d.get("tipo_carro"),
+            "tipo_combustible": d.get("tipo_combustible"),
+            "pertenencia": d.get("pertenencia", "institucional"),
+            "licencias_requeridas": d.get("licencias_requeridas", []),
+            "conductor_matricola": d.get("conductor_matricola", ""),
             "capacidad_pasajeros": d.get("capacidad_pasajeros"),
             "observaciones": d.get("observaciones", ""),
         }
         res = cm.actualizar_carro(placa_id, datos)
         if res["success"]:
             ok(res["message"])
+            nueva_placa = res.get("data", {}).get("placa") if res.get("data") else None
+            if nueva_placa and nueva_placa != placa_id:
+                info(f"Nueva placa registrada: {nueva_placa}")
         else:
             err(res["message"])
+    except Exception as e:
+        err(f"Error: {e}")
+    pausar()
+
+
+def definir_viajes_particulares():
+    subtitulo("VIAJES PARTICULARES")
+    placa = pedir("Placa del carro (Enter para cancelar)", requerido=False, valor_defecto="").strip().upper()
+    if not placa:
+        info("Operacion cancelada.")
+        pausar()
+        return
+    try:
+        cm = get_car_manager()
+        carro = cm.obtener_carro(placa)
+        if not carro:
+            err("Carro no encontrado.")
+            pausar()
+            return
+        d = carro if isinstance(carro, dict) else carro.to_dict()
+        if d.get("pertenencia", "institucional") != "particular":
+            warn("Este carro no esta marcado como particular. Igual puedes definir viajes, pero se recomienda cambiar su pertenencia primero.")
+
+        print()
+        print(f"  {C.BOLD}{d.get('marca','')} {d.get('modelo','')} - {d.get('placa','')}{C.RESET}")
+        print(f"  {C.DIM}Viajes actuales: {len(d.get('viajes_particulares', []))}{C.RESET}")
+
+        dia = pedir("Dia (Lunedì/Martedì/Mercoledì/Giovedì/Venerdì)").strip()
+        matriculas = pedir("Matriculas de estudiantes separadas por coma").strip()
+        conductor = pedir("Matricula del conductor (opcional)", requerido=False, valor_defecto="").strip()
+        observaciones = pedir("Observaciones (opcional)", requerido=False, valor_defecto="").strip()
+
+        if not dia or not matriculas:
+            err("Dia y matriculas son requeridos.")
+            pausar()
+            return
+
+        entry = {
+            "dia": dia,
+            "tipo": "ida_vuelta",
+            "estudiantes": [m.strip() for m in matriculas.split(',') if m.strip()],
+            "conductor_matricola": conductor,
+            "observaciones": observaciones,
+        }
+        viajes = d.get("viajes_particulares", []) or []
+        viajes.append(entry)
+        res = cm.definir_viajes_particulares(placa, viajes)
+        if res["success"]:
+            ok("Viaje particular guardado.")
+        else:
+            err(res["message"])
+            for e_msg in res.get("errors", []):
+                print(f"    - {e_msg}")
     except Exception as e:
         err(f"Error: {e}")
     pausar()
@@ -418,7 +565,7 @@ def menu_estudiantes():
         titulo("GESTION DE ESTUDIANTES")
         menu_opcion(1, "Listar estudiantes")
         menu_opcion(2, "Agregar estudiante (manual)")
-        menu_opcion(3, "Registrar via portal universitario", "requiere Chrome")
+        menu_opcion(3, "Registrar via portal universitario", "requiere navegador Chromium")
         menu_opcion(4, "Ver detalle")
         menu_opcion(5, "Editar estudiante")
         menu_opcion(6, "Marcar disponibilidad de hoy")
@@ -581,8 +728,8 @@ def crear_estudiante():
 
 def registrar_via_portal():
     subtitulo("REGISTRO VIA PORTAL UNIVERSITARIO")
-    warn("Este proceso abre Chrome y accede al portal de la universidad.")
-    warn("Requiere Chrome instalado y conexion a internet.")
+    warn("Este proceso abre el navegador configurado y accede al portal de la universidad.")
+    warn("Requiere Edge o Chrome instalado y conexion a internet.")
     print()
     if not pedir_confirmacion("Continuar?"):
         return
@@ -762,8 +909,7 @@ def ver_estudiante():
                     dia = c.get("dia", "")
                     bloques_set.add(blq)
                     grid[(blq, dia)] = c
-                bloques_romanos = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
-                bloques = [b for b in bloques_romanos if b in bloques_set]
+                bloques = [b for b in ORDEN_BLOQUES if b in bloques_set]
 
                 col_w = 18
                 print(f"\n  {C.BOLD}HORARIO SEMANAL (Semestre {d.get('semestre_activo','?')}){C.RESET}")
@@ -913,7 +1059,7 @@ def editar_estudiante():
     pausar()
 
 
-BLOQUES_VALIDOS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+BLOQUES_VALIDOS = ORDEN_BLOQUES
 
 
 def _agregar_clase(d):
@@ -1118,6 +1264,7 @@ def menu_viajes():
         menu_opcion(3, "Ver detalle de viaje")
         menu_opcion(4, "Agregar pasajero a viaje")
         menu_opcion(5, "Asignacion automatica", "genera viajes del dia segun disponibilidad")
+        menu_opcion(6, "Generar PDF diario de rutas")
         menu_opcion(0, "Volver")
         print()
         op = pedir("Opcion", requerido=False, valor_defecto="0")
@@ -1127,6 +1274,7 @@ def menu_viajes():
         elif op == "3": ver_viaje()
         elif op == "4": agregar_pasajero()
         elif op == "5": asignacion_automatica()
+        elif op == "6": generar_pdf_diario()
         else: err("Opcion invalida.")
 
 
@@ -1314,6 +1462,34 @@ def asignacion_automatica():
     pausar()
 
 
+def generar_pdf_diario():
+    subtitulo("GENERAR PDF DIARIO DE RUTAS")
+    fecha = pedir("Fecha (YYYY-MM-DD)", valor_defecto=date.today().isoformat())
+    output_default = os.path.join("reportes", "rutas_diarias", f"rutas_{fecha.replace('-', '')}.pdf")
+    output_path = pedir("Ruta de salida PDF", requerido=False, valor_defecto=output_default).strip()
+    if not pedir_confirmacion(f"Generar PDF para {fecha}?"):
+        return
+    try:
+        planner = get_route_planner()
+        res = planner.generar_pdf_diario(fecha, output_path)
+        if res["success"]:
+            ok(res["message"])
+            info(f"Archivo: {res['path']}")
+            resumen = res.get("data", {}).get("resumen", {})
+            info(
+                f"Estudiantes: {resumen.get('total_estudiantes', 0)} | "
+                f"Asignados: {resumen.get('total_asignados', 0)} | "
+                f"Sin asignar: {resumen.get('total_sin_asignar', 0)}"
+            )
+        else:
+            err(res.get("message", "Error generando PDF"))
+            for e_msg in res.get("errors", []):
+                print(f"    - {e_msg}")
+    except Exception as e:
+        err(f"Error: {e}")
+    pausar()
+
+
 # =============================================================================
 #  MODULO: LISTAS DIARIAS
 # =============================================================================
@@ -1420,19 +1596,48 @@ def menu_sistema():
     while True:
         limpiar()
         titulo("SISTEMA / CONFIGURACION")
-        menu_opcion(1, "Estadisticas generales")
-        menu_opcion(2, "Verificar almacenamiento local")
-        menu_opcion(3, "Verificar Chrome / Selenium")
-        menu_opcion(4, "Gestionar contrasena de administrador")
+        menu_opcion(1, "Estado del proyecto")
+        menu_opcion(2, "Estadisticas generales")
+        menu_opcion(3, "Verificar almacenamiento local")
+        menu_opcion(4, "Verificar navegador / Selenium")
+        menu_opcion(5, "Gestionar contrasena de administrador")
         menu_opcion(0, "Volver")
         print()
         op = pedir("Opcion", requerido=False, valor_defecto="0")
         if   op == "0": break
-        elif op == "1": estadisticas_generales()
-        elif op == "2": probar_almacenamiento()
-        elif op == "3": probar_chrome()
-        elif op == "4": gestionar_admin()
+        elif op == "1": mostrar_estado_proyecto()
+        elif op == "2": estadisticas_generales()
+        elif op == "3": probar_almacenamiento()
+        elif op == "4": probar_chrome()
+        elif op == "5": gestionar_admin()
         else: err("Opcion invalida.")
+
+
+def mostrar_estado_proyecto():
+    """Mostrar las funciones operativas, implementadas y pendientes."""
+    subtitulo("ESTADO DEL PROYECTO")
+    print(f"  {C.GREEN}{C.BOLD}OPERATIVO Y VERIFICADO{C.RESET}")
+    print(f"  {C.GREEN}[OK]{C.RESET} Extraccion de estudiantes desde el portal universitario")
+    print(f"  {C.GREEN}[OK]{C.RESET} Selenium con Microsoft Edge en modo headless")
+    print(f"  {C.GREEN}[OK]{C.RESET} Guardado y lectura local Markdown/YAML")
+    print(f"  {C.GREEN}[OK]{C.RESET} Gestion de estudiantes y horarios")
+
+    print(f"\n  {C.CYAN}{C.BOLD}IMPLEMENTADO — PENDIENTE DE VALIDACION COMPLETA{C.RESET}")
+    print(f"  {C.CYAN}[~]{C.RESET} Gestion de carros y compatibilidad de licencias")
+    print(f"  {C.CYAN}[~]{C.RESET} Gestion manual y automatica de viajes")
+    print(f"  {C.CYAN}[~]{C.RESET} Listas diarias y planificacion de rutas")
+    print(f"  {C.CYAN}[~]{C.RESET} Exportacion de rutas a PDF")
+    print(f"  {C.CYAN}[~]{C.RESET} Estadisticas, logging y administracion")
+
+    print(f"\n  {C.YELLOW}{C.BOLD}EN DESARROLLO / PENDIENTE{C.RESET}")
+    print(f"  {C.YELLOW}[!]{C.RESET} Interfaz web (actualmente solo CLI)")
+    print(f"  {C.YELLOW}[!]{C.RESET} Extraccion especifica de calificaciones del portal")
+    print(f"  {C.YELLOW}[!]{C.RESET} Comparacion automatica de fechas de datos extraidos")
+    print(f"  {C.YELLOW}[!]{C.RESET} Bloqueo de eliminacion de carros con viajes activos")
+    print(f"  {C.YELLOW}[!]{C.RESET} Identificacion del usuario que crea una lista")
+    print()
+    info("El estado se actualiza a medida que se validan los flujos completos.")
+    pausar()
 
 
 def estadisticas_generales():
@@ -1482,23 +1687,32 @@ def probar_almacenamiento():
 
 
 def probar_chrome():
-    subtitulo("VERIFICAR CHROME / SELENIUM")
-    info("Intentando iniciar Chrome en modo headless...")
+    subtitulo("VERIFICAR NAVEGADOR / SELENIUM")
+    browser_name = os.getenv("BROWSER", "edge").strip().lower()
+    info(f"Intentando iniciar {browser_name.title()} en modo headless...")
     try:
         from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        opts = Options()
-        opts.add_argument("--headless")
+        if browser_name == "edge":
+            from selenium.webdriver.edge.options import Options
+            opts = Options()
+            create_driver = lambda: webdriver.Edge(options=opts)
+        elif browser_name == "chrome":
+            from selenium.webdriver.chrome.options import Options
+            opts = Options()
+            create_driver = lambda: webdriver.Chrome(options=opts)
+        else:
+            raise ValueError("BROWSER debe ser edge o chrome")
+        opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=opts)
+        driver = create_driver()
         driver.get("about:blank")
         version = driver.capabilities.get("browserVersion", "desconocida")
         driver.quit()
-        ok(f"Chrome funcionando. Version: {version}")
+        ok(f"{browser_name.title()} funcionando. Version: {version}")
     except Exception as e:
-        err(f"Chrome no disponible: {e}")
-        info("Instala Google Chrome y luego: pip install webdriver-manager")
+        err(f"{browser_name.title()} no disponible: {e}")
+        info("Instala Microsoft Edge o Google Chrome y vuelve a intentarlo.")
     pausar()
 
 

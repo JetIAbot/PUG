@@ -7,6 +7,7 @@
 python-dotenv>=1.2.0
 pyyaml>=6.0.3
 werkzeug>=3.1.0
+reportlab>=4.0.0
 
 # --- WEB SCRAPING (extraccion portal universitario) ---
 selenium>=4.41.0
