@@ -9,15 +9,23 @@ Uso: python main.py
 import os
 import sys
 import logging
-from datetime import datetime, date
+import subprocess
+from datetime import date
 
 from utils.constants import ORDEN_BLOQUES
 
 # Forzar UTF-8 en Windows para caracteres especiales
 if os.name == "nt":
-    os.system("chcp 65001 > NUL 2>&1")
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    subprocess.run(
+        ["cmd", "/c", "chcp", "65001"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
 
 # Silenciar logs de librerias durante la interaccion con el usuario
 logging.disable(logging.CRITICAL)
@@ -43,7 +51,10 @@ def info(msg): print(f"  {C.CYAN}[INFO]{C.RESET} {msg}")
 
 
 def limpiar():
-    os.system("cls" if os.name == "nt" else "clear")
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "cls"], check=False)
+    else:
+        subprocess.run(["clear"], check=False)
 
 
 def pausar():
@@ -314,7 +325,7 @@ def listar_carros():
             "Filtrar por estado [disponible/en_uso/mantenimiento/fuera_servicio] o Enter para todos",
             requerido=False, valor_defecto=""
         )
-        filtros = {"estado": estado} if estado else None
+        filtros = {"estado": estado} if estado else {}
         carros = cm.obtener_todos_carros(filtros)
         _tabla_carros(carros)
         stats = cm.obtener_estadisticas()
@@ -429,7 +440,7 @@ def editar_carro():
         pausar()
         return
     try:
-        from core.models import TipoCarro, TipoCombustible, EstadoCarro, PertenenciaCarro
+        from core.models import TipoCarro, TipoCombustible, PertenenciaCarro
         cm = get_car_manager()
         carro = cm.obtener_carro(placa_id)
         if not carro:
@@ -842,6 +853,7 @@ def registrar_via_portal():
     sm = get_student_manager()
     existente = sm.obtener_estudiante(matricola)
     es_actualizacion = existente is not None
+    d_prev = {}
     if es_actualizacion:
         d_prev = existente if isinstance(existente, dict) else existente.to_dict()
         nom_prev = f"{d_prev.get('nombre', d_prev.get('nome', ''))} {d_prev.get('apellido', d_prev.get('cognome', ''))}".strip()
@@ -1140,7 +1152,7 @@ def editar_estudiante():
 
         # Recalcular viaja_hoy con el horario actualizado
         horario = d.get("horario", d.get("clases", []))
-        viaja_hoy, dia_hoy, n_clases = _calcular_viaja_hoy(horario)
+        viaja_hoy, _, _ = _calcular_viaja_hoy(horario)
 
         datos = {
             "nombre": nom_actual,
@@ -1877,6 +1889,7 @@ def gestionar_admin():
     subtitulo("GESTIONAR CONTRASENA ADMIN")
     try:
         from utils.admin_tools import AdminPasswordManager
+        from werkzeug.security import check_password_hash
         apm = AdminPasswordManager()
         print()
         menu_opcion(1, "Generar hash de nueva contrasena")
@@ -1884,16 +1897,18 @@ def gestionar_admin():
         print()
         op = pedir("Opcion", requerido=False, valor_defecto="0")
         if op == "1":
-            username = pedir("Nombre de usuario admin")
             password = pedir("Nueva contrasena")
-            resultado = apm.generate_admin_hash(username, password)
-            ok("Hash generado.")
-            print(f"\n  {C.YELLOW}{resultado}{C.RESET}\n")
-            info("Guarda este hash en tu .env.")
+            resultado = apm.create_password_hash(password)
+            if resultado:
+                ok("Hash generado.")
+                print(f"\n  {C.YELLOW}{resultado}{C.RESET}\n")
+                info("Guarda este hash en tu .env.")
+            else:
+                err("No se pudo generar el hash.")
         elif op == "2":
             password     = pedir("Contrasena a verificar")
             hash_guardado = pedir("Hash guardado")
-            if apm.verify_password(password, hash_guardado):
+            if check_password_hash(hash_guardado, password):
                 ok("Contrasena valida.")
             else:
                 err("Contrasena incorrecta.")
@@ -1952,7 +1967,7 @@ def menu_principal():
 if __name__ == "__main__":
     # Habilitar colores ANSI en la terminal de Windows
     if os.name == "nt":
-        os.system("color")
+        subprocess.run(["cmd", "/c", "color"], check=False)
 
     limpiar()
     print(BANNER)
