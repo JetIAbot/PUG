@@ -8,12 +8,15 @@ import time
 import logging
 from typing import Dict, List, Optional
 from selenium import webdriver
+from selenium.webdriver.common.options import ArgOptions
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException
+from selenium.webdriver.remote.webdriver import WebDriver
 from dotenv import load_dotenv
 from utils.constants import PORTAL_SELECTORS
 
@@ -29,37 +32,48 @@ class SecureWebDriver:
         self.driver = None
         self.logger = logging.getLogger('selenium_secure')
     
-    def setup_driver(self) -> Optional[webdriver.Chrome]:
+    def setup_driver(self) -> Optional[WebDriver]:
         """
-        Configurar Chrome con opciones de seguridad
-        
+        Configurar el navegador seleccionado con opciones de seguridad.
+
         Returns:
-            webdriver.Chrome: Driver configurado o None si hay error
+            webdriver.WebDriver: Driver configurado o None si hay error
         """
         try:
-            chrome_options = Options()
-            
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            
-            # Modo headless moderno (Chrome 109+)
-            if os.getenv('HEADLESS_MODE', 'True').lower() == 'true':
-                chrome_options.add_argument('--headless=new')
+            browser = os.getenv("BROWSER", "edge").strip().lower()
+            if browser not in {"edge", "chrome"}:
+                raise ValueError(
+                    f"Navegador no soportado: {browser}. Use BROWSER=edge o BROWSER=chrome."
+                )
+
+            options: ArgOptions
+            if browser == "edge":
+                options = EdgeOptions()
+            else:
+                options = Options()
+
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+
+            if os.getenv("HEADLESS_MODE", "True").lower() == "true":
+                options.add_argument("--headless=new")
                 self.logger.info("Modo headless activado")
-            
-            # Configurar servicio
-            try:
-                from webdriver_manager.chrome import ChromeDriverManager
-                service = Service(ChromeDriverManager().install())
-            except Exception:
-                service = Service()
-            
-            # Crear driver
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+
+            if browser == "edge":
+                # Selenium Manager localiza Edge y descarga msedgedriver si es necesario.
+                self.driver = webdriver.Edge(options=options)
+            else:
+                try:
+                    from webdriver_manager.chrome import ChromeDriverManager
+                    service = Service(ChromeDriverManager().install())
+                except Exception:
+                    service = Service()
+                self.driver = webdriver.Chrome(service=service, options=options)
+
             self.driver.set_page_load_timeout(30)
             self.driver.implicitly_wait(10)
-            
-            self.logger.info("Driver configurado exitosamente")
+
+            self.logger.info("Driver %s configurado exitosamente", browser)
             return self.driver
             
         except Exception as e:
@@ -72,16 +86,22 @@ class SecureWebDriver:
             try:
                 # Limpiar datos de sesión
                 self.driver.delete_all_cookies()
-                self.driver.execute_script("window.sessionStorage.clear();")
-                self.driver.execute_script("window.localStorage.clear();")
+                if self.driver.current_url.startswith(("http://", "https://")):
+                    try:
+                        self.driver.execute_script("window.sessionStorage.clear();")
+                        self.driver.execute_script("window.localStorage.clear();")
+                    except WebDriverException as e:
+                        self.logger.warning("No se pudo limpiar el almacenamiento del navegador: %s", e)
                 self.logger.info("Datos de sesión limpiados")
-                
-                # Cerrar driver
-                self.driver.quit()
-                self.logger.info("Driver cerrado de forma segura")
-            except Exception as e:
-                self.logger.warning(f"Error cerrando driver: {e}")
+            except WebDriverException as e:
+                self.logger.warning("No se pudieron limpiar las cookies del navegador: %s", e)
             finally:
+                # Cerrar driver
+                try:
+                    self.driver.quit()
+                    self.logger.info("Driver cerrado de forma segura")
+                except WebDriverException as e:
+                    self.logger.warning("Error cerrando driver: %s", e)
                 self.driver = None
 
 class PortalExtractor:

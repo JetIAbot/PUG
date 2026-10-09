@@ -22,6 +22,7 @@ class ViajeManager:
         self.car_manager = CarManager()
         self.student_manager = StudentManager()
         self.collection_viajes = 'viajes'
+        self.collection_viajes_archivados = 'viajes_archivados'
         self.collection_listas = 'listas_diarias'
     
     def crear_viaje(self, viaje_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -222,15 +223,30 @@ class ViajeManager:
                 data = doc.to_dict()
                 logger.info(f"Viaje encontrado: {id_viaje}")
                 return data
-            else:
-                logger.warning(f"Viaje no encontrado: {id_viaje}")
-                return None
+
+            archived_ref = self.db.collection(
+                self.collection_viajes_archivados
+            ).document(id_viaje)
+            archived_doc = archived_ref.get()
+            if archived_doc.exists:
+                data = archived_doc.to_dict()
+                data['archivado'] = True
+                logger.info(f"Viaje archivado encontrado: {id_viaje}")
+                return data
+
+            logger.warning(f"Viaje no encontrado: {id_viaje}")
+            return None
                 
         except Exception as e:
             logger.error(f"Error obteniendo viaje {id_viaje}: {e}")
             return None
     
-    def listar_viajes(self, fecha: Optional[str] = None, estado: Optional[str] = None) -> List[Dict[str, Any]]:
+    def listar_viajes(
+        self,
+        fecha: Optional[str] = None,
+        estado: Optional[str] = None,
+        incluir_archivados: bool = False,
+    ) -> List[Dict[str, Any]]:
         """
         Listar viajes con filtros opcionales
         
@@ -242,26 +258,31 @@ class ViajeManager:
             list: Lista de viajes
         """
         try:
-            query = self.db.collection(self.collection_viajes)
+            self.marcar_viajes_pasados_completados()
+            colecciones = [self.collection_viajes]
+            if incluir_archivados:
+                colecciones.append(self.collection_viajes_archivados)
             
             # Aplicar filtros
-            if fecha:
-                query = query.where('fecha', '==', fecha)
-            
-            if estado:
-                query = query.where('estado', '==', estado)
-            
-            # Ordenar por fecha y hora
-            query = query.order_by('fecha').order_by('hora_salida')
-            
-            # Ejecutar consulta
-            docs = query.stream()
             viajes = []
-            
-            for doc in docs:
-                data = doc.to_dict()
-                data['id_viaje'] = doc.id
-                viajes.append(data)
+
+            for nombre_coleccion in colecciones:
+                query = self.db.collection(nombre_coleccion)
+                if fecha:
+                    query = query.where('fecha', '==', fecha)
+                if estado:
+                    query = query.where('estado', '==', estado)
+                for doc in query.order_by('fecha').order_by('hora_salida').stream():
+                    data = doc.to_dict()
+                    data['id_viaje'] = doc.id
+                    if nombre_coleccion == self.collection_viajes_archivados:
+                        data['archivado'] = True
+                    viajes.append(data)
+
+            viajes.sort(key=lambda viaje: (
+                str(viaje.get('fecha', '')),
+                str(viaje.get('hora_salida', '')),
+            ))
             
             logger.info(f"Encontrados {len(viajes)} viajes")
             return viajes
@@ -269,6 +290,110 @@ class ViajeManager:
         except Exception as e:
             logger.error(f"Error listando viajes: {e}")
             return []
+
+    def archivar_viajes_completados(self, hasta: str) -> Dict[str, Any]:
+        """Mover viajes completados anteriores a una colección de archivo.
+
+        Las listas diarias siguen funcionando porque ``obtener_viaje`` busca
+        tanto en la colección activa como en la archivada.
+        """
+        try:
+            limite = datetime.strptime(hasta, '%Y-%m-%d').date()
+        except ValueError:
+            return {
+                'success': False,
+                'message': 'Fecha límite inválida (usar YYYY-MM-DD)',
+                'errors': ['Formato de fecha inválido'],
+            }
+
+        archivados = []
+        try:
+            for doc in self.db.collection(self.collection_viajes).stream():
+                viaje = doc.to_dict()
+                fecha_texto = viaje.get('fecha')
+                if viaje.get('estado') != 'completado' or not fecha_texto:
+                    continue
+                try:
+                    fecha_viaje = datetime.strptime(
+                        str(fecha_texto), '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    logger.warning(
+                        "Fecha inválida en viaje %s: %s", doc.id, fecha_texto
+                    )
+                    continue
+                if fecha_viaje >= limite:
+                    continue
+
+                viaje['archivado_en'] = datetime.now().isoformat()
+                self.db.collection(
+                    self.collection_viajes_archivados
+                ).document(doc.id).set(viaje)
+                doc.reference.delete()
+                archivados.append(doc.id)
+
+            return {
+                'success': True,
+                'message': f'{len(archivados)} viaje(s) archivado(s)',
+                'archivados': archivados,
+            }
+        except Exception as e:
+            logger.error(f"Error archivando viajes: {e}")
+            return {
+                'success': False,
+                'message': f'Error técnico: {str(e)}',
+                'errors': [str(e)],
+                'archivados': archivados,
+            }
+
+    def marcar_viajes_pasados_completados(self) -> int:
+        """Marcar como completados los viajes planificados cuya fecha ya pasó.
+
+        Los archivos no se eliminan ni se mueven: se conserva el historial
+        y las referencias de las listas diarias siguen siendo válidas.
+
+        Returns:
+            int: Cantidad de viajes actualizados.
+        """
+        hoy = date.today()
+        actualizados = 0
+        try:
+            docs = self.db.collection(self.collection_viajes).stream()
+            for doc in docs:
+                viaje = doc.to_dict()
+                estado = viaje.get('estado')
+                fecha_texto = viaje.get('fecha')
+                if estado not in {'planificado', 'en_curso'} or not fecha_texto:
+                    continue
+
+                try:
+                    fecha_viaje = datetime.strptime(
+                        str(fecha_texto), '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    logger.warning(
+                        "Fecha inválida en viaje %s: %s",
+                        doc.id,
+                        fecha_texto,
+                    )
+                    continue
+
+                if fecha_viaje < hoy:
+                    doc.reference.update({
+                        'estado': 'completado',
+                        'fecha_actualizacion': datetime.now().isoformat(),
+                    })
+                    actualizados += 1
+
+            if actualizados:
+                logger.info(
+                    "Actualizados %s viajes históricos a completado",
+                    actualizados,
+                )
+            return actualizados
+        except Exception as e:
+            logger.error(f"Error actualizando estados históricos: {e}")
+            return actualizados
     
     def crear_lista_diaria(self, fecha: str, viajes_ida: List[str] = None, viajes_vuelta: List[str] = None) -> Dict[str, Any]:
         """
@@ -414,12 +539,39 @@ class ViajeManager:
             
             # Algoritmo de asignación
             viajes_generados = self._algoritmo_asignacion(conductores, estudiantes_viajan, carros_disponibles, fecha)
-            
+
+            # Persistir los viajes para que puedan consultarse desde el menú,
+            # reutilizarse en las listas diarias y abrirse en el detalle.
+            viajes_creados_ids = []
+            for viaje in viajes_generados:
+                viaje_data = {
+                    **viaje,
+                    'fecha_creacion': datetime.now().isoformat(),
+                }
+                self.db.collection(self.collection_viajes).document(
+                    viaje['id_viaje']
+                ).set(viaje_data)
+                viajes_creados_ids.append(viaje['id_viaje'])
+
             logger.info(f"Asignación automática completada: {len(viajes_generados)} viajes generados")
-            
+
             return {
                 'success': True,
                 'message': f'Asignación completada: {len(viajes_generados)} viajes generados',
+                'viajes_creados': viajes_generados,
+                'viajes_creados_ids': viajes_creados_ids,
+                'estudiantes_sin_asignar': [
+                    estudiante['matricola']
+                    for estudiante in estudiantes_viajan
+                    if estudiante['matricola'] not in {
+                        pasajero
+                        for viaje in viajes_generados
+                        for pasajero in viaje.get('pasajeros', [])
+                    }
+                    and estudiante['matricola'] not in {
+                        viaje['matricola_conductor'] for viaje in viajes_generados
+                    }
+                ],
                 'data': {
                     'viajes_generados': viajes_generados,
                     'total_viajes': len(viajes_generados),
@@ -449,6 +601,13 @@ class ViajeManager:
         Returns:
             list: Lista de viajes generados
         """
+        # CarManager devuelve instancias Carro; el algoritmo trabaja con
+        # diccionarios porque necesita consultar campos con subíndices.
+        carros = [
+            carro.to_dict() if isinstance(carro, Carro) else carro
+            for carro in carros
+        ]
+
         viajes_generados = []
         estudiantes_asignados = set()
         carros_usados = set()

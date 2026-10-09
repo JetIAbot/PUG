@@ -4,7 +4,8 @@ Todas las configuraciones, selectores y constantes del sistema
 """
 
 # --- CONFIGURACIÓN DE HORARIOS UNIVERSITARIOS ---
-ORDEN_BLOQUES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
+# Bloques según la referencia visual del horario actual
+ORDEN_BLOQUES = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII']
 
 BLOQUES_A_HORAS = {
     'I': '08:30 - 09:15', 
@@ -14,9 +15,7 @@ BLOQUES_A_HORAS = {
     'V': '15:00 - 15:45', 
     'VI': '16:00 - 16:45',
     'VII': '17:00 - 17:45', 
-    'VIII': '18:00 - 18:45', 
-    'IX': '19:00 - 19:45',
-    'X': '20:00 - 20:45'
+    'VIII': '18:00 - 18:45'
 }
 
 DIAS_SEMANA = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato']
