@@ -106,6 +106,102 @@ def pedir_confirmacion(pregunta):
     return resp.lower() in ("s", "si", "y", "yes")
 
 
+def _seleccionar_viaje(incluir_archivados=False):
+    """Mostrar viajes y devolver el ID técnico seleccionado."""
+    viajes = get_viaje_manager().listar_viajes(
+        incluir_archivados=incluir_archivados
+    )
+    if not viajes:
+        warn("No hay viajes disponibles.")
+        return None
+    print(f"\n  {C.BOLD}VIAJES DISPONIBLES{C.RESET}")
+    for indice, viaje in enumerate(viajes, 1):
+        estado = viaje.get("estado", "")
+        archivado = " | archivado" if viaje.get("archivado") else ""
+        tipo = "ida" if str(viaje.get("id_viaje", "")).startswith("ida_") else "vuelta"
+        print(
+            f"  {C.CYAN}[{indice}]{C.RESET} "
+            f"{viaje.get('fecha', '')} {viaje.get('hora_salida', '')} | "
+            f"{tipo} | conductor {viaje.get('matricola_conductor', '')} | "
+            f"{len(viaje.get('pasajeros', []))} pasajeros | {estado}{archivado}"
+        )
+    print(f"  {C.CYAN}[0]{C.RESET} Cancelar")
+    while True:
+        try:
+            opcion = int(pedir("Seleccione un viaje"))
+        except ValueError:
+            err("Ingresa un numero valido.")
+            continue
+        if opcion == 0:
+            return None
+        if 1 <= opcion <= len(viajes):
+            return viajes[opcion - 1].get("id_viaje")
+        err(f"Ingresa un numero entre 0 y {len(viajes)}.")
+
+
+def _seleccionar_carro():
+    """Mostrar carros y devolver la placa del carro seleccionado."""
+    carros = get_car_manager().obtener_todos_carros()
+    if not carros:
+        warn("No hay carros disponibles.")
+        return None
+    print(f"\n  {C.BOLD}CARROS DISPONIBLES{C.RESET}")
+    for indice, carro in enumerate(carros, 1):
+        data = carro if isinstance(carro, dict) else carro.to_dict()
+        print(
+            f"  {C.CYAN}[{indice}]{C.RESET} "
+            f"{data.get('placa', '')} | {data.get('marca', '')} "
+            f"{data.get('modelo', '')} | {data.get('tipo_carro', '')} | "
+            f"{data.get('estado', '')}"
+        )
+    print(f"  {C.CYAN}[0]{C.RESET} Cancelar")
+    while True:
+        try:
+            opcion = int(pedir("Seleccione un carro"))
+        except ValueError:
+            err("Ingresa un numero valido.")
+            continue
+        if opcion == 0:
+            return None
+        if 1 <= opcion <= len(carros):
+            data = carros[opcion - 1]
+            return (data if isinstance(data, dict) else data.to_dict()).get("placa")
+        err(f"Ingresa un numero entre 0 y {len(carros)}.")
+
+
+def _seleccionar_estudiante():
+    """Mostrar estudiantes y devolver la matrícula seleccionada."""
+    estudiantes = get_student_manager().listar_estudiantes()
+    if not estudiantes:
+        warn("No hay estudiantes disponibles.")
+        return None
+    print(f"\n  {C.BOLD}ESTUDIANTES DISPONIBLES{C.RESET}")
+    for indice, estudiante in enumerate(estudiantes, 1):
+        data = estudiante if isinstance(estudiante, dict) else estudiante.to_dict()
+        nombre = (
+            f"{data.get('nombre', data.get('nome', ''))} "
+            f"{data.get('apellido', data.get('cognome', ''))}"
+        ).strip()
+        print(
+            f"  {C.CYAN}[{indice}]{C.RESET} "
+            f"{data.get('matricola', '')} | {nombre} | "
+            f"licencia: {'si' if data.get('tiene_licencia') else 'no'}"
+        )
+    print(f"  {C.CYAN}[0]{C.RESET} Cancelar")
+    while True:
+        try:
+            opcion = int(pedir("Seleccione un estudiante"))
+        except ValueError:
+            err("Ingresa un numero valido.")
+            continue
+        if opcion == 0:
+            return None
+        if 1 <= opcion <= len(estudiantes):
+            data = estudiantes[opcion - 1]
+            return (data if isinstance(data, dict) else data.to_dict()).get("matricola")
+        err(f"Ingresa un numero entre 0 y {len(estudiantes)}.")
+
+
 # ─── Inicializacion lazy de managers ─────────────────────────────────────────
 
 _managers = {}
@@ -286,7 +382,9 @@ def crear_carro():
 
 def ver_carro():
     subtitulo("DETALLE DE CARRO")
-    placa = pedir("Placa del carro").strip().upper()
+    placa = _seleccionar_carro()
+    if not placa:
+        return
     try:
         carro = get_car_manager().obtener_carro(placa)
         if not carro:
@@ -325,7 +423,7 @@ def ver_carro():
 def editar_carro():
     limpiar()
     subtitulo("EDITAR CARRO")
-    placa_id = pedir("Placa del carro (Enter para cancelar)", requerido=False, valor_defecto="").strip().upper()
+    placa_id = _seleccionar_carro()
     if not placa_id:
         info("Operacion cancelada.")
         pausar()
@@ -457,7 +555,7 @@ def editar_carro():
 
 def definir_viajes_particulares():
     subtitulo("VIAJES PARTICULARES")
-    placa = pedir("Placa del carro (Enter para cancelar)", requerido=False, valor_defecto="").strip().upper()
+    placa = _seleccionar_carro()
     if not placa:
         info("Operacion cancelada.")
         pausar()
@@ -511,7 +609,9 @@ def definir_viajes_particulares():
 def cambiar_estado_carro():
     subtitulo("CAMBIAR ESTADO")
     from core.models import EstadoCarro
-    placa = pedir("Placa del carro").strip().upper()
+    placa = _seleccionar_carro()
+    if not placa:
+        return
     try:
         cm = get_car_manager()
         carro = cm.obtener_carro(placa)
@@ -535,7 +635,9 @@ def cambiar_estado_carro():
 
 def eliminar_carro():
     subtitulo("ELIMINAR CARRO")
-    placa = pedir("Placa del carro").strip().upper()
+    placa = _seleccionar_carro()
+    if not placa:
+        return
     try:
         cm = get_car_manager()
         carro = cm.obtener_carro(placa)
@@ -856,7 +958,9 @@ def _mostrar_cambios_portal(d_prev, perfil_nuevo, horario_nuevo, horario_prev):
 
 def ver_estudiante():
     subtitulo("DETALLE DE ESTUDIANTE")
-    matricola = pedir("Matricola")
+    matricola = _seleccionar_estudiante()
+    if not matricola:
+        return
     try:
         estudiante = get_student_manager().obtener_estudiante(matricola)
         if not estudiante:
@@ -948,7 +1052,9 @@ def ver_estudiante():
 def editar_estudiante():
     limpiar()
     subtitulo("EDITAR ESTUDIANTE")
-    matricola = pedir("Matricola")
+    matricola = _seleccionar_estudiante()
+    if not matricola:
+        return
     try:
         sm = get_student_manager()
         estudiante = sm.obtener_estudiante(matricola)
@@ -1231,7 +1337,9 @@ def marcar_disponibilidad():
 
 def eliminar_estudiante():
     subtitulo("ELIMINAR ESTUDIANTE")
-    matricola = pedir("Matricola")
+    matricola = _seleccionar_estudiante()
+    if not matricola:
+        return
     try:
         sm = get_student_manager()
         estudiante = sm.obtener_estudiante(matricola)
@@ -1265,6 +1373,7 @@ def menu_viajes():
         menu_opcion(4, "Agregar pasajero a viaje")
         menu_opcion(5, "Asignacion automatica", "genera viajes del dia segun disponibilidad")
         menu_opcion(6, "Generar PDF diario de rutas")
+        menu_opcion(7, "Archivar viajes completados")
         menu_opcion(0, "Volver")
         print()
         op = pedir("Opcion", requerido=False, valor_defecto="0")
@@ -1275,6 +1384,7 @@ def menu_viajes():
         elif op == "4": agregar_pasajero()
         elif op == "5": asignacion_automatica()
         elif op == "6": generar_pdf_diario()
+        elif op == "7": archivar_viajes()
         else: err("Opcion invalida.")
 
 
@@ -1324,6 +1434,32 @@ def listar_viajes():
     pausar()
 
 
+def archivar_viajes():
+    subtitulo("ARCHIVAR VIAJES COMPLETADOS")
+    info("Solo se moveran viajes con estado completado anteriores a la fecha indicada.")
+    hasta = pedir(
+        "Archivar viajes anteriores a (YYYY-MM-DD)",
+        valor_defecto=date.today().isoformat(),
+    )
+    if not pedir_confirmacion(f"Archivar viajes anteriores a {hasta}?"):
+        info("Operacion cancelada.")
+        pausar()
+        return
+    try:
+        res = get_viaje_manager().archivar_viajes_completados(hasta)
+        if res["success"]:
+            ok(res["message"])
+            if res.get("archivados"):
+                info("Los detalles y las listas históricas seguiran disponibles.")
+        else:
+            err(res["message"])
+            for e_msg in res.get("errors", []):
+                print(f"    - {e_msg}")
+    except Exception as e:
+        err(f"Error: {e}")
+    pausar()
+
+
 def crear_viaje():
     subtitulo("CREAR VIAJE MANUAL")
     try:
@@ -1339,13 +1475,17 @@ def crear_viaje():
             warn("No hay conductores disponibles (estudiantes con licencia vigente).")
             pausar()
             return
+        conductor_opciones = []
         print(f"\n  {C.CYAN}Conductores disponibles:{C.RESET}")
         for c in conductores:
             d = c if isinstance(c, dict) else c.to_dict()
             lics = ", ".join(d.get("tipos_licencia", []))
-            print(f"  {C.DIM}  {d.get('matricola',''):<12} "
-                  f"{d.get('nombre','')} {d.get('apellido','')}  [{lics}]{C.RESET}")
-        matricola_conductor = pedir("Matricola del conductor")
+            conductor_opciones.append(
+                f"{d.get('matricola','')} | "
+                f"{d.get('nombre','')} {d.get('apellido','')} [{lics}]"
+            )
+        conductor_seleccionado = pedir_opcion(conductor_opciones, "Conductor")
+        matricola_conductor = conductor_seleccionado.split(" | ", 1)[0]
 
         # Carros disponibles
         cm = get_car_manager()
@@ -1354,13 +1494,16 @@ def crear_viaje():
             warn("No hay carros disponibles.")
             pausar()
             return
+        carro_opciones = []
         print(f"\n  {C.CYAN}Carros disponibles:{C.RESET}")
         for c in carros_disp:
             d = c if isinstance(c, dict) else c.to_dict()
-            print(f"  {C.DIM}  {d.get('placa',''):<12} "
-                  f"{d.get('marca','')} {d.get('modelo','')} "
-                  f"(cap: {d.get('capacidad_pasajeros','')}){C.RESET}")
-        placa_carro = pedir("Placa del carro").strip().upper()
+            carro_opciones.append(
+                f"{d.get('placa','')} | {d.get('marca','')} "
+                f"{d.get('modelo','')} | capacidad {d.get('capacidad_pasajeros','')}"
+            )
+        carro_seleccionado = pedir_opcion(carro_opciones, "Carro")
+        placa_carro = carro_seleccionado.split(" | ", 1)[0].strip().upper()
         obs      = pedir("Observaciones", requerido=False, valor_defecto="")
 
         datos = {
@@ -1382,7 +1525,9 @@ def crear_viaje():
 
 def ver_viaje():
     subtitulo("DETALLE DE VIAJE")
-    id_viaje = pedir("ID del viaje")
+    id_viaje = _seleccionar_viaje(incluir_archivados=True)
+    if not id_viaje:
+        return
     try:
         viaje = get_viaje_manager().obtener_viaje(id_viaje)
         if not viaje:
@@ -1422,8 +1567,12 @@ def ver_viaje():
 
 def agregar_pasajero():
     subtitulo("AGREGAR PASAJERO A VIAJE")
-    id_viaje  = pedir("ID del viaje")
-    matricola = pedir("Matricola del pasajero")
+    id_viaje = _seleccionar_viaje()
+    if not id_viaje:
+        return
+    matricola = _seleccionar_estudiante()
+    if not matricola:
+        return
     try:
         res = get_viaje_manager().agregar_pasajero(id_viaje, matricola)
         if res["success"]:
@@ -1465,7 +1614,12 @@ def asignacion_automatica():
 def generar_pdf_diario():
     subtitulo("GENERAR PDF DIARIO DE RUTAS")
     fecha = pedir("Fecha (YYYY-MM-DD)", valor_defecto=date.today().isoformat())
-    output_default = os.path.join("reportes", "rutas_diarias", f"rutas_{fecha.replace('-', '')}.pdf")
+    output_default = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "reportes",
+        "rutas_diarias",
+        f"rutas_{fecha.replace('-', '')}.pdf",
+    )
     output_path = pedir("Ruta de salida PDF", requerido=False, valor_defecto=output_default).strip()
     if not pedir_confirmacion(f"Generar PDF para {fecha}?"):
         return
@@ -1625,6 +1779,8 @@ def mostrar_estado_proyecto():
     print(f"\n  {C.CYAN}{C.BOLD}IMPLEMENTADO — PENDIENTE DE VALIDACION COMPLETA{C.RESET}")
     print(f"  {C.CYAN}[~]{C.RESET} Gestion de carros y compatibilidad de licencias")
     print(f"  {C.CYAN}[~]{C.RESET} Gestion manual y automatica de viajes")
+    print(f"  {C.CYAN}[~]{C.RESET} Cierre automatico de viajes con fecha pasada")
+    print(f"  {C.CYAN}[~]{C.RESET} Archivado manual de viajes completados")
     print(f"  {C.CYAN}[~]{C.RESET} Listas diarias y planificacion de rutas")
     print(f"  {C.CYAN}[~]{C.RESET} Exportacion de rutas a PDF")
     print(f"  {C.CYAN}[~]{C.RESET} Estadisticas, logging y administracion")
@@ -1635,6 +1791,7 @@ def mostrar_estado_proyecto():
     print(f"  {C.YELLOW}[!]{C.RESET} Comparacion automatica de fechas de datos extraidos")
     print(f"  {C.YELLOW}[!]{C.RESET} Bloqueo de eliminacion de carros con viajes activos")
     print(f"  {C.YELLOW}[!]{C.RESET} Identificacion del usuario que crea una lista")
+    print(f"  {C.YELLOW}[!]{C.RESET} Archivado automatico por antiguedad y retencion configurable")
     print()
     info("El estado se actualiza a medida que se validan los flujos completos.")
     pausar()

@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, time
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -52,6 +53,8 @@ class StudentSchedule:
 class DailyRoutePlanner:
     """Planificador de rutas para un dia especifico."""
 
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
     def __init__(self, student_manager=None, car_manager=None):
         if student_manager is None:
             from core.student_manager import StudentManager
@@ -71,6 +74,8 @@ class DailyRoutePlanner:
 
         fecha_obj = date.fromisoformat(fecha_str)
         ruta_salida = Path(output_path) if output_path else self._ruta_pdf_por_defecto(fecha_obj)
+        if not ruta_salida.is_absolute():
+            ruta_salida = self.PROJECT_ROOT / ruta_salida
         ruta_salida.parent.mkdir(parents=True, exist_ok=True)
         self._exportar_pdf(plan["data"], ruta_salida)
 
@@ -403,97 +408,161 @@ class DailyRoutePlanner:
         )
 
     def _ruta_pdf_por_defecto(self, fecha_obj: date) -> Path:
-        return Path("reportes") / "rutas_diarias" / f"rutas_{fecha_obj.strftime('%Y%m%d')}.pdf"
+        return self.PROJECT_ROOT / "reportes" / "rutas_diarias" / f"rutas_{fecha_obj.strftime('%Y%m%d')}.pdf"
 
     def _exportar_pdf(self, plan: Dict[str, Any], output_path: Path):
         estilos = getSampleStyleSheet()
         estilos.add(ParagraphStyle(name="Small", parent=estilos["BodyText"], fontSize=8, leading=10))
         estilos.add(ParagraphStyle(name="Tiny", parent=estilos["BodyText"], fontSize=7, leading=8))
+        estilos.add(ParagraphStyle(
+            name="TableText",
+            parent=estilos["BodyText"],
+            fontSize=7,
+            leading=8,
+            alignment=1,
+        ))
+        estilos.add(ParagraphStyle(
+            name="TableTextLeft",
+            parent=estilos["BodyText"],
+            fontSize=7,
+            leading=8,
+        ))
 
         doc = SimpleDocTemplate(
             str(output_path),
-            pagesize=landscape(A4),
-            rightMargin=24,
-            leftMargin=24,
-            topMargin=24,
-            bottomMargin=24,
+            pagesize=A4,
+            rightMargin=30,
+            leftMargin=30,
+            topMargin=30,
+            bottomMargin=30,
         )
 
         story = []
-        story.append(Paragraph(f"<b>Ruta diaria de carpooling</b> - {plan['fecha']} ({plan['dia_it']})", estilos["Title"]))
-        story.append(Spacer(1, 10))
+        story.append(Paragraph("Lista de vehículos para el viaje", estilos["Title"]))
+        story.append(Paragraph(
+            f"{escape(plan['dia_it'])} · {escape(plan['fecha'])}",
+            estilos["Heading3"],
+        ))
+        story.append(Spacer(1, 8))
 
         resumen = plan["resumen"]
-        resumen_data = [[
-            "Total estudiantes", "Asignados", "Sin asignar", "Carros usados", "Institucionales", "Particulares"
-        ], [
-            str(resumen["total_estudiantes"]),
-            str(resumen["total_asignados"]),
-            str(resumen["total_sin_asignar"]),
-            str(resumen["total_carros_usados"]),
-            str(resumen["total_institucionales"]),
-            str(resumen["total_particulares"]),
-        ]]
-        tabla_resumen = Table(resumen_data, colWidths=[90, 70, 70, 70, 90, 80])
-        tabla_resumen.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E79")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#A9A9A9")),
-            ("BACKGROUND", (0, 1), (-1, -1), colors.whitesmoke),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        assignments = plan["asignaciones"]
+        return_times = [
+            a.get("vuelta", {}).get("hora_salida", "")
+            for a in assignments
+            if a.get("vuelta", {}).get("hora_salida")
+        ]
+        return_time = max(return_times) if return_times else "—"
+
+        metadata = [
+            [
+                Paragraph("<b>Fecha del viaje</b>", estilos["TableTextLeft"]),
+                Paragraph(escape(plan["fecha"]), estilos["TableTextLeft"]),
+                Paragraph("<b>Destino</b>", estilos["TableTextLeft"]),
+                Paragraph("Universidad Gregoriana", estilos["TableTextLeft"]),
+            ],
+            [
+                Paragraph("<b>Hora de regreso</b>", estilos["TableTextLeft"]),
+                Paragraph(escape(return_time), estilos["TableTextLeft"]),
+                Paragraph("<b>Estudiantes</b>", estilos["TableTextLeft"]),
+                Paragraph(
+                    f"{resumen['total_asignados']} asignados / "
+                    f"{resumen['total_sin_asignar']} sin asignar",
+                    estilos["TableTextLeft"],
+                ),
+            ],
+        ]
+        tabla_metadata = Table(metadata, colWidths=[95, 120, 75, 245])
+        tabla_metadata.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#D9EAF7")),
+            ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#D9EAF7")),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#8EA9C1")),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ]))
-        story.append(tabla_resumen)
+        story.append(tabla_metadata)
         story.append(Spacer(1, 12))
 
-        headers = ["Grupo", "Tipo", "Carro", "Pertenencia", "Conductor", "Salida", "Referencia", "Estudiantes"]
-        rows = [headers]
+        headers = [
+            "Auto",
+            "Placa",
+            "Conductor",
+            "Componentes",
+            "Salida ida",
+            "Clase ida",
+            "Salida vuelta",
+            "Clase termina",
+        ]
+        rows = [[Paragraph(f"<b>{escape(header)}</b>", estilos["TableText"]) for header in headers]]
         for idx, asignacion in enumerate(plan["asignaciones"], 1):
             estudiantes = asignacion.get("estudiantes", [])
-            estudiantes_txt = "<br/>".join(
-                f"{e['matricola']} - {e['nombre']} {e['apellido']}" for e in estudiantes
+            componentes_txt = "<br/>".join(
+                f"{escape(str(e.get('matricola', '')))} - "
+                f"{escape(str(e.get('nombre', '')))} {escape(str(e.get('apellido', '')))}"
+                for e in estudiantes
             )
             carro = asignacion.get("carro", {})
             conductor = asignacion.get("conductor", {})
-            for tramo in ("ida", "vuelta"):
-                tramo_data = asignacion.get(tramo, {})
-                rows.append([
-                    f"G{idx:02d}",
-                    tramo,
-                    f"{carro.get('placa','')}\n{carro.get('marca','')} {carro.get('modelo','')}",
-                    carro.get("pertenencia", "institucional"),
-                    f"{conductor.get('matricola','')}\n{conductor.get('nombre','')} {conductor.get('apellido','')}",
-                    tramo_data.get("hora_salida", ""),
-                    tramo_data.get("hora_referencia", ""),
-                    Paragraph(estudiantes_txt, estilos["Tiny"]),
-                ])
+            ida = asignacion.get("ida", {})
+            vuelta = asignacion.get("vuelta", {})
+            auto = f"G{idx:02d} · {carro.get('marca', '')} {carro.get('modelo', '')}"
+            conductor_txt = (
+                f"{conductor.get('nombre', '')} {conductor.get('apellido', '')}<br/>"
+                f"{conductor.get('matricola', '')}"
+            )
+            rows.append([
+                Paragraph(escape(auto), estilos["TableTextLeft"]),
+                Paragraph(escape(str(carro.get("placa", ""))), estilos["TableText"]),
+                Paragraph(conductor_txt, estilos["TableTextLeft"]),
+                Paragraph(componentes_txt, estilos["TableTextLeft"]),
+                Paragraph(escape(str(ida.get("hora_salida", ""))), estilos["TableText"]),
+                Paragraph(escape(str(ida.get("hora_referencia", ""))), estilos["TableText"]),
+                Paragraph(escape(str(vuelta.get("hora_salida", ""))), estilos["TableText"]),
+                Paragraph(escape(str(vuelta.get("hora_referencia", ""))), estilos["TableText"]),
+            ])
 
-        tabla = Table(rows, colWidths=[42, 42, 120, 70, 120, 52, 52, 240], repeatRows=1)
+        tabla = Table(
+            rows,
+            colWidths=[78, 48, 85, 145, 48, 48, 55, 56],
+            repeatRows=1,
+        )
         tabla.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2F5597")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1F4E79")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
             ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#B0B0B0")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ALIGN", (0, 0), (6, -1), "CENTER"),
+            ("ALIGN", (1, 0), (1, -1), "CENTER"),
+            ("ALIGN", (4, 0), (-1, -1), "CENTER"),
             ("BACKGROUND", (0, 1), (-1, -1), colors.white),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.whitesmoke, colors.HexColor("#F8FBFF")]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
-        story.append(Paragraph("<b>Asignaciones</b>", estilos["Heading2"]))
+        story.append(Paragraph("<b>Vehículos y componentes</b>", estilos["Heading2"]))
         story.append(tabla)
         story.append(Spacer(1, 10))
 
         if plan["sin_asignar"]:
-            story.append(Paragraph("<b>Estudiantes sin asignar</b>", estilos["Heading2"]))
-            sin_asignar_rows = [["Matricula", "Nombre", "Primera salida", "Ultima salida"]]
+            story.append(Paragraph("<b>Componentes sin asignar</b>", estilos["Heading2"]))
+            sin_asignar_rows = [[
+                Paragraph("<b>Matrícula</b>", estilos["TableText"]),
+                Paragraph("<b>Nombre</b>", estilos["TableText"]),
+                Paragraph("<b>Salida prevista</b>", estilos["TableText"]),
+                Paragraph("<b>Regreso previsto</b>", estilos["TableText"]),
+            ]]
             for e in plan["sin_asignar"]:
                 sin_asignar_rows.append([
-                    e["matricola"],
-                    f"{e['nombre']} {e['apellido']}",
-                    e["first_departure"],
-                    e["last_departure"],
+                    Paragraph(escape(str(e["matricola"])), estilos["TableText"]),
+                    Paragraph(escape(f"{e['nombre']} {e['apellido']}"), estilos["TableTextLeft"]),
+                    Paragraph(escape(str(e["first_departure"])), estilos["TableText"]),
+                    Paragraph(escape(str(e["last_departure"])), estilos["TableText"]),
                 ])
             tabla_sin = Table(sin_asignar_rows, colWidths=[70, 220, 90, 90], repeatRows=1)
             tabla_sin.setStyle(TableStyle([
@@ -508,8 +577,9 @@ class DailyRoutePlanner:
 
         story.append(Spacer(1, 10))
         story.append(Paragraph(
-            "Salida ida calculada como 1h30 antes de la primera clase. "
-            "Regreso calculado con margen de 15 minutos tras la ultima clase.",
+            "Salida ida = 90 minutos antes de la primera clase del grupo. "
+            "Salida vuelta = 15 minutos después de la última clase. "
+            "Clase ida y Clase termina son las horas académicas de referencia.",
             estilos["Small"],
         ))
 

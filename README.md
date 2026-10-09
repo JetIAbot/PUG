@@ -1,132 +1,159 @@
-# PUG - Portal University Grouper
+# PUG — Portal University Grouper
 
-Sistema de carpooling para estudiantes universitarios de la Pontificia Università Gregoriana (Roma). Gestiona estudiantes, horarios extraídos automáticamente del portal universitario y organiza viajes compartidos semanales.
+Sistema de carpooling para estudiantes de la **Pontificia Università Gregoriana** de Roma. PUG obtiene los horarios del portal universitario, calcula la disponibilidad de los estudiantes y ayuda a organizar viajes compartidos hacia la universidad.
 
-## Estado actual del proyecto
+> **Estado actual:** la extracción del portal y la gestión de estudiantes han sido probadas con datos reales. La aplicación se encuentra actualmente en fase CLI.
 
-La extracción de datos del portal universitario fue validada en una prueba individual:
+## Índice
 
-- Microsoft Edge inicia correctamente mediante Selenium.
-- El portal `segreteria.unigre.it` carga correctamente.
-- El registro de un estudiante desde el portal captura y guarda sus datos y horario.
-- La persistencia local en archivos Markdown/YAML funciona con los datos de `datos/`.
+- [Qué hace PUG](#qué-hace-pug)
+- [Estado del proyecto](#estado-del-proyecto)
+- [Requisitos](#requisitos)
+- [Instalación](#instalación)
+- [Configuración](#configuración)
+- [Uso](#uso)
+- [Arquitectura](#arquitectura)
+- [Portal universitario](#portal-universitario)
+- [Almacenamiento](#almacenamiento)
+- [Seguridad y privacidad](#seguridad-y-privacidad)
+- [Validación](#validación)
 
-Desde el menú **Sistema / Configuración > Estado del proyecto** se puede consultar este estado directamente en la CLI.
+## Qué hace PUG
 
-### Funciones operativas y verificadas
+- Extrae el perfil y el horario del estudiante desde el portal universitario.
+- Detecta el semestre activo publicado.
+- Calcula la disponibilidad semanal a partir del horario.
+- Gestiona estudiantes, licencias de conducir y vehículos.
+- Crea viajes y asigna pasajeros según disponibilidad y capacidad.
+- Genera listas diarias y planes de rutas en PDF.
+- Guarda los datos localmente en archivos Markdown compatibles con Obsidian.
+- Ofrece una interfaz interactiva de terminal en español.
 
-- Extracción de perfil y horario desde el portal universitario.
+### Selección de elementos en la interfaz
+
+Las operaciones de consulta y edición muestran los elementos disponibles en
+una lista numerada. El usuario selecciona la opción correspondiente y ya no
+necesita recordar matrículas, placas o IDs técnicos largos. Los identificadores
+completos se conservan internamente para mantener la unicidad y las referencias
+históricas; la opción `[0] Cancelar` está disponible en estos selectores.
+
+## Estado del proyecto
+
+### Listo para versión preliminar Alpha
+
+Los siguientes módulos tienen un flujo funcional completo y están preparados para formar parte de una primera versión preliminar **Alpha**:
+
+- Gestión de estudiantes: registro manual y desde el portal, edición, consulta, disponibilidad y eliminación.
+- Gestión de vehículos: registro, consulta, edición, estados, capacidad y compatibilidad de licencias.
+
+La versión Alpha todavía debe continuar validándose con más escenarios y datos antes de considerarse estable para producción.
+
+### Operativo y verificado
+
+- Extracción de perfil y horario desde `segreteria.unigre.it`.
+- Microsoft Edge mediante Selenium en modo headless.
 - Detección del semestre activo.
 - Guardado y lectura de estudiantes en Markdown con YAML frontmatter.
 - Gestión de estudiantes y actualización de disponibilidad.
-- Selenium con Microsoft Edge en modo headless.
+- Almacenamiento local en la carpeta `datos/`.
 
-### Funciones implementadas pendientes de validación completa
+### Implementado, pendiente de validación completa
 
-- CRUD de carros, estados y compatibilidad de licencias.
 - Creación manual y asignación automática de viajes.
-- Listas diarias de viajes y planificación de rutas.
+- Persistencia de viajes y actualización automática a `completado` cuando su fecha ya pasó.
+- Archivado manual de viajes completados desde el menú, conservando su consulta histórica.
+- Listas diarias y planificación de rutas.
 - Exportación de rutas a PDF.
 - Estadísticas, logging y herramientas administrativas.
 
-### Funciones aún en desarrollo
+### En desarrollo
 
-- Interfaz web: la aplicación actual es exclusivamente CLI.
+- Interfaz web: actualmente solo está disponible la CLI.
 - Extracción específica de calificaciones del portal.
 - Comparación automática de fechas de datos extraídos.
-- Impedir la eliminación de carros que tengan viajes activos.
+- Impedir la eliminación de vehículos con viajes activos.
 - Registrar el usuario real que crea una lista diaria.
+- Archivado automático por antigüedad y política configurable de conservación.
 
-## Caracteristicas
+Este resumen también está disponible dentro de la aplicación en:
 
-- Extraccion automatizada de horarios desde el portal universitario (Selenium + Microsoft Edge)
-- Deteccion automatica de semestre activo (1ro o 2do)
-- Registro manual o via portal de estudiantes
-- Calculo automatico de disponibilidad semanal segun horario
-- Gestion de licencias de conducir y vehiculos
-- Almacenamiento local en archivos Markdown (compatible con Obsidian)
-- Interfaz CLI completa con menus interactivos
-- Deteccion de licencias vencidas al registrar
-- Visualizacion de horario semanal en formato grilla
-- Sistema de logging y auditoria
+**Sistema / Configuración → Estado del proyecto**
 
-## Tecnologias
+## Requisitos
 
-- **Python** 3.12+
-- **Selenium WebDriver** + Selenium Manager para Edge (extraccion del portal)
-- **PyYAML** (almacenamiento Markdown con YAML frontmatter)
-- **Werkzeug** (hashing de contrasenas admin)
-- **python-dotenv** (configuracion por entorno)
+- Windows con Microsoft Edge instalado.
+- Python **3.12 o superior**.
+- El entorno utilizado para la validación actual es **Python 3.14.8**.
+- Conexión a Internet para acceder al portal universitario.
+- Credenciales válidas del portal para registrar estudiantes mediante extracción automática.
 
-## Estructura del Proyecto
+### Dependencias principales
 
-```
-PUG/
-+-- main.py                    # Interfaz CLI principal
-+-- config.py                  # Configuracion por entornos
-+-- requirements.txt           # Dependencias Python
-+-- .env / .env.example        # Variables de entorno
-+-- pyproject.toml             # Metadata del proyecto
-|
-+-- core/                      # Logica de negocio
-|   +-- portal_extractor.py    # Extraccion del portal universitario
-|   +-- student_scheduler.py   # Orquestador: extraccion + procesamiento + guardado
-|   +-- student_manager.py     # CRUD de estudiantes
-|   +-- car_manager.py         # CRUD de vehiculos
-|   +-- viaje_manager.py       # CRUD de viajes y asignacion automatica
-|   +-- obsidian_manager.py    # Almacenamiento local Markdown (reemplaza Firebase)
-|   +-- data_processor.py      # Procesamiento de datos
-|   +-- demo_generator.py      # Generacion de datos demo
-|   +-- models.py              # Modelos: Estudiante, Carro, Viaje, TipoLicencia
-|
-+-- utils/                     # Utilidades
-|   +-- constants.py           # Constantes y selectores del portal
-|   +-- validators.py          # Validaciones de datos
-|   +-- logger_config.py       # Configuracion de logging
-|   +-- log_cleaner.py         # Limpieza de logs
-|   +-- admin_tools.py         # Herramientas administrativas
-|
-+-- datos/                     # Base de datos local (gitignored)
-|   +-- estudiantes/           # Un archivo .md por estudiante
-|
-+-- scripts/                   # Scripts de utilidades
-|   +-- analyze_logs.py
-|   +-- security_check.py
-|   +-- test_chrome.py
-|   +-- test_portal.py
-|
-+-- logs/                      # Logs del sistema
-+-- tests/                     # Pruebas
-```
+| Dependencia | Uso |
+|---|---|
+| `selenium` | Automatización del navegador y extracción del portal |
+| Selenium Manager | Localización y gestión de `msedgedriver` |
+| `PyYAML` | Lectura y escritura del frontmatter Markdown |
+| `python-dotenv` | Carga de configuración desde `.env` |
+| `Werkzeug` | Hashing de contraseñas administrativas |
+| `ReportLab` | Generación de rutas en PDF |
 
-## Instalacion
+Google Chrome también puede utilizarse como alternativa configurando `BROWSER=chrome`.
+
+## Instalación
 
 ```powershell
 git clone https://github.com/JetIAbot/PUG.git
 cd PUG
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Configurar variables de entorno
+Para salir del entorno virtual:
 
-Copiar `.env.example` a `.env` y ajustar:
+```powershell
+deactivate
+```
+
+## Configuración
+
+1. Copia `.env.example` como `.env`.
+2. Ajusta la ruta de datos y el navegador si es necesario.
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Configuración mínima recomendada:
 
 ```env
 APP_ENV=development
 DEBUG=True
+DEMO_MODE=True
+
 DATOS_PATH=datos
+
+PORTAL_URL=https://segreteria.unigre.it
+BROWSER=edge
+HEADLESS_MODE=True
+
 LOG_LEVEL=INFO
+AUTO_CLEANUP=True
+LOG_MAX_DAYS=7
+
+MASK_CREDENTIALS=True
+LOG_SENSITIVE_DATA=False
 ```
 
-### Requisitos adicionales
-
-- **Microsoft Edge** instalado (navegador predeterminado para la extracción del portal)
-- Selenium Manager localiza Edge y gestiona `msedgedriver` automáticamente
-- Google Chrome también es compatible como alternativa configurando `BROWSER=chrome`
+Las credenciales del portal **no se guardan en `.env` ni en archivos del proyecto**. Se introducen durante el registro y se utilizan únicamente durante la sesión de extracción.
 
 ## Uso
+
+Inicia la aplicación con:
 
 ```powershell
 python main.py
@@ -134,45 +161,102 @@ python main.py
 
 ### Menú principal
 
-```
+```text
 [1] Gestionar Carros
 [2] Gestionar Estudiantes
 [3] Gestionar Viajes
 [4] Listas Diarias
-[5] Sistema / Configuracion
+[5] Sistema / Configuración
 [0] Salir
 ```
 
-### Gestion de Estudiantes
+### Flujo recomendado
 
+1. **Registrar un estudiante**
+   - Manualmente, o
+   - mediante el portal universitario.
+2. **Actualizar la disponibilidad semanal** del estudiante.
+3. **Registrar los vehículos** disponibles y sus conductores.
+4. **Generar viajes** mediante asignación manual o automática.
+5. **Crear y consultar listas diarias**.
+6. **Exportar el plan diario a PDF** cuando la planificación haya sido validada.
+
+En el menú **Sistema / Configuración** también están disponibles las comprobaciones de almacenamiento, navegador/Selenium, estadísticas y administración.
+
+## Arquitectura
+
+```text
+PUG/
+├── main.py                    # Interfaz CLI y menús
+├── config.py                  # Configuración por entorno
+├── requirements.txt           # Dependencias Python
+├── pyproject.toml             # Metadatos y configuración de pytest
+├── .env.example               # Plantilla de configuración local
+│
+├── core/
+│   ├── portal_extractor.py    # Extracción mediante Selenium
+│   ├── student_scheduler.py   # Procesamiento de horarios y compatibilidades
+│   ├── student_manager.py     # CRUD de estudiantes
+│   ├── car_manager.py         # CRUD de vehículos
+│   ├── viaje_manager.py       # CRUD y asignación de viajes
+│   ├── daily_route_planner.py # Planificación diaria y exportación PDF
+│   ├── obsidian_manager.py    # Persistencia Markdown/YAML
+│   ├── data_processor.py      # Procesamiento coordinado de datos
+│   ├── demo_generator.py      # Datos de demostración
+│   └── models.py              # Modelos y reglas de dominio
+│
+├── utils/
+│   ├── constants.py           # Constantes y selectores del portal
+│   ├── validators.py          # Validaciones
+│   ├── logger_config.py       # Configuración de logging
+│   ├── log_cleaner.py         # Limpieza de logs
+│   └── admin_tools.py         # Herramientas administrativas
+│
+├── datos/                     # Datos locales; excluidos de Git
+├── logs/                      # Logs; excluidos de Git
+├── scripts/                   # Diagnóstico y utilidades
+└── tests/                     # Pruebas automatizadas
 ```
-[1] Listar estudiantes
-[2] Crear estudiante (manual)
-[3] Registrar via portal
-[4] Ver detalle de estudiante
-[5] Editar estudiante
-[6] Actualizar disponibilidad semanal
-[7] Eliminar estudiante
-[0] Volver
+
+## Portal universitario
+
+PUG utiliza:
+
+```text
+https://segreteria.unigre.it
 ```
 
-### Flujo tipico
+La extracción obtiene:
 
-1. **Registrar estudiante via portal** (opcion 1 -> 3): extrae nombre, email, telefono y horario completo del semestre activo. Pregunta tipo de licencia y preferencia de viaje.
-2. **Actualizar disponibilidad semanal** (opcion 1 -> 6): calcula automaticamente que dias viaja cada estudiante segun su horario.
-3. **Registrar vehiculos** (opcion 2): anadir carros disponibles para carpooling.
-4. **Generar viajes** (opcion 3): asignacion automatica de pasajeros a conductores por dia.
+- datos personales del estudiante;
+- materias disponibles;
+- horario semanal;
+- semestre activo;
+- calificaciones cuando el portal y el extractor las proporcionan.
 
-### Portal universitario
+El navegador predeterminado es Edge:
 
-El sistema se conecta a `https://segreteria.unigre.it` y extrae:
-- Datos personales (nombre, apellido, email, telefono) desde "Dati Anagrafici"
-- Horario semanal completo desde "Orario Settimanale"
-- Deteccion automatica del semestre publicado (cuando un semestre esta publicado, el otro aparece vacio)
+```env
+BROWSER=edge
+```
 
-### Almacenamiento
+Para utilizar Chrome:
 
-Cada estudiante se guarda como un archivo `.md` en `datos/estudiantes/` con YAML frontmatter:
+```env
+BROWSER=chrome
+```
+
+El modo headless se controla mediante `HEADLESS_MODE`.
+
+## Almacenamiento
+
+Cada estudiante se guarda normalmente en:
+
+```text
+datos/estudiantes/<matricola>.md
+```
+
+El archivo contiene YAML frontmatter, por ejemplo:
 
 ```yaml
 ---
@@ -182,28 +266,47 @@ cognome: ROSSI
 email: mario.rossi@example.com
 telefono: '390000000000'
 semestre_activo: 2
+estado_horarios: disponible
 horario:
   - codigo: XX1234
     materia: NOMBRE DE MATERIA
     profesor: Prof. APELLIDO Nombre
-    dia: Lunedi
+    dia: Lunedì
     bloque: I
     aula: 'Aula: A101 Piano: 1'
-materias:
-  - codigo: XX1234
-    nombre: NOMBRE DE MATERIA
-    creditos: '3'
-    semestre: '2'
+materias: []
+calificaciones: []
 ---
 ```
 
-## Seguridad
+La carpeta `datos/` está incluida en `.gitignore` porque puede contener información personal.
 
-- `.gitignore` protege: `.env`, `datos/`, `*.log`
-- Credenciales del portal nunca se almacenan, solo se usan durante la extraccion
-- Contrasenas admin hasheadas con Werkzeug
-- Datos personales solo en almacenamiento local
+## Seguridad y privacidad
+
+- `.env`, `datos/` y `logs/` están excluidos del repositorio.
+- Las credenciales del portal no se almacenan.
+- Las contraseñas administrativas se guardan mediante hashing de Werkzeug.
+- El registro de logs puede configurarse para no incluir datos sensibles.
+- No deben compartirse ni versionarse archivos de datos reales.
+
+## Validación
+
+Comprobaciones realizadas durante la validación actual:
+
+```powershell
+python -m pip check
+python -m compileall -q .
+```
+
+También se verificó que:
+
+- Edge inicia correctamente mediante Selenium.
+- El portal universitario carga correctamente en Edge.
+- El almacenamiento local responde correctamente.
+- Un estudiante existente puede leerse desde `datos/estudiantes/`.
+
+El directorio `tests/` todavía contiene una cobertura automatizada limitada; los scripts de `scripts/` sirven como diagnósticos y pruebas manuales.
 
 ## Licencia
 
-Ver [LICENSE](LICENSE)
+Consulta [LICENSE](LICENSE).
