@@ -1,3 +1,5 @@
+import pytest
+
 from services.extraction_service import ExtractionService
 from services.extraction_worker import ExtractionTask, ExtractionWorker
 from services.job_store import PersistentJobStore
@@ -48,6 +50,30 @@ def test_registration_prepares_credentials_only_for_extraction():
     assert result["extraction"] == {
         "matricola": "171532",
         "password": "PortalPass123",
+        "carpool": {
+            "tiene_licencia": False,
+            "tipos_licencia": [],
+            "fecha_vencimiento_licencia": None,
+        },
+    }
+
+
+def test_registration_prepares_license_details_for_worker():
+    service = RegistrationService(FakeStudentManager())
+
+    result = service.prepare_extraction({
+        "matricola": "171532",
+        "password": "PortalPass123",
+        "tiene_licencia": True,
+        "tipos_licencia": ["B", "BE"],
+        "fecha_vencimiento_licencia": "2099-12-31",
+    })
+
+    assert result["valid"]
+    assert result["extraction"]["carpool"] == {
+        "tiene_licencia": True,
+        "tipos_licencia": ["B", "BE"],
+        "fecha_vencimiento_licencia": "2099-12-31",
     }
 
 
@@ -82,6 +108,31 @@ def test_extraction_worker_completes_job_without_persisting_password():
 
     assert store.statuses == [("job-1", "processing"), ("job-1", "completed")]
     assert scheduler.calls == [("171532", "PortalPass123")]
+
+
+def test_extraction_worker_rejects_tasks_when_queue_is_full():
+    worker = ExtractionWorker(
+        FakeJobStore(),
+        ExtractionService(FakeScheduler()),
+        max_pending_jobs=1,
+    )
+
+    assert worker.submit(ExtractionTask("job-1", "171532", "PortalPass123"))
+    assert not worker.submit(ExtractionTask("job-2", "171533", "PortalPass456"))
+    worker.stop()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"worker_count": 0}, "worker_count"),
+        ({"max_pending_jobs": 0}, "max_pending_jobs"),
+        ({"timeout_seconds": 0}, "timeout_seconds"),
+    ],
+)
+def test_extraction_worker_rejects_invalid_limits(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        ExtractionWorker(FakeJobStore(), ExtractionService(FakeScheduler()), **kwargs)
 
 
 class FakeJobStore:

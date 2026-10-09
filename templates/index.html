@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Registro seguro de estudiantes en PUG">
+  <title>PUG | Registro de estudiante</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header class="brand">
+      <div class="brand-mark">P</div>
+      <div><p class="eyebrow">Portal University Grouper</p><h1>Registro de estudiante</h1></div>
+      <span class="status-pill"><span></span> Servicio activo</span>
+    </header>
+    <section class="hero">
+      <div><p class="eyebrow accent">PUG · acceso interno</p>
+        <h2>Importa tu horario sin complicaciones.</h2>
+        <p class="hero-copy">Introduce tus datos del portal universitario. PUG procesará la solicitud en segundo plano y guardará únicamente la información académica necesaria.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="schedule-card"><span>EXTRACCIÓN</span><strong>En segundo plano</strong><i>✓</i></div></div>
+    </section>
+    <section class="content-grid">
+      <form id="registration-form" class="panel form-panel" novalidate>
+        <div class="panel-heading"><div><p class="eyebrow">01 · Solicitud</p><h3 id="form-title">Datos de acceso</h3></div><span class="secure-label">🔒 Seguro</span></div>
+        <div class="mode-switch" role="group" aria-label="Tipo de solicitud">
+          <button type="button" class="mode-button active" data-mode="register">Nuevo estudiante</button>
+          <button type="button" class="mode-button" data-mode="refresh">Actualizar horario</button>
+        </div>
+        <p class="muted">Tus credenciales se utilizan solo durante la extracción y no se guardan.</p>
+        <label for="matricola">Matrícula</label>
+        <input id="matricola" name="matricola" inputmode="numeric" autocomplete="username" placeholder="Ej. 171532" required>
+        <small class="field-error" data-error="matricola"></small>
+        <label for="password">Contraseña del portal</label>
+        <div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Contraseña del portal" required><button type="button" class="icon-button" id="toggle-password" aria-label="Mostrar contraseña">◉</button></div>
+        <small class="field-error" data-error="password"></small>
+        <fieldset class="license-fields">
+          <legend>Datos de conducción</legend>
+          <label class="consent license-toggle"><input id="tiene_licencia" type="checkbox"><span>Tengo licencia de conducir</span></label>
+          <div id="license-details" class="license-details hidden">
+            <span class="license-label">Tipos de licencia</span>
+            <div class="license-options">
+              {% for license in ["A1", "A2", "A", "B", "C1", "C", "D1", "D", "BE", "CE", "DE"] %}
+              <label><input type="checkbox" name="tipos_licencia" value="{{ license }}">{{ license }}</label>
+              {% endfor %}
+            </div>
+            <label for="fecha_vencimiento_licencia">Vencimiento</label>
+            <input id="fecha_vencimiento_licencia" type="date">
+          </div>
+          <small class="field-error" data-error="license"></small>
+        </fieldset>
+        <label class="consent"><input id="consentimiento" name="consentimiento" type="checkbox" required><span>Autorizo a PUG a acceder temporalmente al portal para obtener mi horario y acepto que los datos se almacenen en el sistema interno.</span></label>
+        <small class="field-error" data-error="consentimiento"></small>
+        <button class="primary-button" type="submit"><span id="submit-label">Enviar solicitud</span><span aria-hidden="true">→</span></button>
+        <div id="form-message" class="message" role="alert" aria-live="polite"></div>
+      </form>
+      <aside class="panel info-panel">
+        <p class="eyebrow">02 · Seguimiento</p><h3>Estado de tu solicitud</h3>
+        <div id="empty-state" class="empty-state"><div class="empty-icon">↗</div><p>Aquí aparecerá el estado después de enviar tu solicitud.</p></div>
+        <div id="job-state" class="job-state hidden"><div class="job-top"><span id="job-status" class="job-status">pending</span><span class="job-reference">Referencia <code id="job-id"></code></span></div><div class="progress"><span id="progress-bar"></span></div><p id="job-message" class="muted"></p><button id="new-request" class="secondary-button" type="button">Nueva solicitud</button></div>
+        <div class="steps"><div><b>1</b><span><strong>Solicitud recibida</strong><small>Validamos los datos enviados.</small></span></div><div><b>2</b><span><strong>Extracción segura</strong><small>Un worker procesa el portal.</small></span></div><div><b>3</b><span><strong>Horario guardado</strong><small>El resultado queda disponible para PUG.</small></span></div></div>
+      </aside>
+    </section>
+    <footer><span>PUG · Uso interno</span><a href="/health">Comprobar servicio</a></footer>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

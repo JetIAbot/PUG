@@ -135,14 +135,36 @@ La fase web inicial está disponible en `app.py`. Para ejecutarla localmente:
 ```
 
 Incluye `/health`, `POST /students/register` y `GET /jobs/<id>`. Las
-solicitudes se colocan en una cola local consumida por un único worker. Los
-estados posibles son `pending`, `processing`, `completed` y `failed`. La
+solicitudes se colocan en una cola local consumida por un pool limitado de
+workers Selenium. Por defecto se ejecutan dos extracciones simultáneas y se
+aceptan hasta 20 trabajos esperando en la cola. Los estados posibles son
+`pending`, `processing`, `completed` y `failed`. La
 contraseña del portal se conserva únicamente en memoria mientras el worker
 procesa la extracción; no se incluye en respuestas, logs ni archivos. Los
 Los metadatos se conservan en `JOB_STORE_PATH` (por defecto,
 `datos/.pug_jobs.json`). Si el proceso se reinicia, los trabajos que estaban
 `pending` o `processing` se marcan como `failed`, porque sus contraseñas no se
 persisten y deben volver a enviarse de forma explícita.
+
+Para actualizar el horario de un estudiante ya registrado se utiliza
+`POST /students/refresh`. Este endpoint conserva los datos de carpooling y
+vuelve a ejecutar la extracción del portal. La misma matrícula queda
+bloqueada mientras haya un trabajo activo y durante
+`REFRESH_COOLDOWN_SECONDS` (15 minutos por defecto). Las solicitudes
+rechazadas reciben HTTP `429`.
+
+La concurrencia se puede ajustar con `EXTRACTION_WORKERS`,
+`MAX_PENDING_JOBS` y `EXTRACTION_TIMEOUT_SECONDS`. Se recomienda comenzar con
+dos workers y aumentarlos solo después de probar los límites del portal, la
+memoria del equipo y las escrituras concurrentes en SMB. La autenticación del
+portal continúa ocurriendo dentro de cada extracción; no se persisten ni se
+duplican las contraseñas para realizar una validación previa.
+
+La interfaz web solicita también los datos de conducción: si el estudiante
+tiene licencia, los tipos (`A1`, `A2`, `A`, `B`, `C1`, `C`, `D1`, `D`, `BE`,
+`CE` o `DE`) y la fecha de vencimiento. Estos datos se guardan en el Markdown
+solo después de que la extracción haya terminado correctamente. El
+identificador interno del trabajo no se muestra en la interfaz.
 
 ### Almacenamiento Markdown en carpeta SMB del QNAP
 

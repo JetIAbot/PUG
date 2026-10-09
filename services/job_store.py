@@ -22,10 +22,20 @@ class PersistentJobStore:
         self._load()
         self._recover_interrupted()
 
-    def create(self, matricola: str) -> dict[str, Any] | None:
+    def create(
+        self, matricola: str, cooldown_seconds: int = 0
+    ) -> dict[str, Any] | None:
         with self._lock:
             if matricola in self._active_by_matricola:
                 return None
+            if cooldown_seconds > 0:
+                now = datetime.now(timezone.utc)
+                for job in self._jobs.values():
+                    if job.get("matricola") != matricola:
+                        continue
+                    created = datetime.fromisoformat(job["created_at"])
+                    if (now - created).total_seconds() < cooldown_seconds:
+                        return None
             job = {
                 "job_id": str(uuid4()),
                 "matricola": matricola,

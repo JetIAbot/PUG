@@ -1,10 +1,10 @@
-"""Cola local y worker único para ejecutar extracciones fuera de Flask."""
+"""Cola local y pool limitado para ejecutar extracciones fuera de Flask."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from queue import Queue
-from threading import Event, Thread
+from dataclasses import dataclass, field
+from queue import Empty, Full, Queue
+from threading import Event, Lock, Thread
 from typing import Any
 
 from services.extraction_service import ExtractionService
@@ -15,46 +15,83 @@ class ExtractionTask:
     job_id: str
     matricola: str
     password: str
+    carpool: dict[str, Any] = field(default_factory=dict)
 
 
 class ExtractionWorker:
-    """Consume extracciones en orden, manteniendo una sola sesión Selenium."""
+    """Consume extracciones con un número limitado de sesiones Selenium."""
 
     def __init__(
         self,
         job_store: Any,
         extraction_service: ExtractionService,
+        on_completed: Any | None = None,
         timeout_seconds: float = 300,
+        worker_count: int = 2,
+        max_pending_jobs: int = 20,
     ) -> None:
+        if worker_count < 1:
+            raise ValueError("worker_count debe ser mayor que cero.")
+        if max_pending_jobs < 1:
+            raise ValueError("max_pending_jobs debe ser mayor que cero.")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds debe ser mayor que cero.")
         self.job_store = job_store
         self.extraction_service = extraction_service
         self.timeout_seconds = timeout_seconds
-        self._queue: Queue[ExtractionTask | None] = Queue()
+        self.on_completed = on_completed
+        self.worker_count = worker_count
+        self.max_pending_jobs = max_pending_jobs
+        self._queue: Queue[ExtractionTask | None] = Queue(maxsize=max_pending_jobs)
         self._stop_event = Event()
-        self._thread: Thread | None = None
+        self._completion_lock = Lock()
+        self._threads: list[Thread] = []
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        if any(thread.is_alive() for thread in self._threads):
             return
         self._stop_event.clear()
-        self._thread = Thread(
-            target=self._run,
-            name="pug-extraction-worker",
-            daemon=True,
-        )
-        self._thread.start()
+        self._threads = [
+            Thread(
+                target=self._run,
+                name=f"pug-extraction-worker-{index}",
+                daemon=True,
+            )
+            for index in range(1, self.worker_count + 1)
+        ]
+        for thread in self._threads:
+            thread.start()
 
-    def submit(self, task: ExtractionTask) -> None:
-        self._queue.put(task)
+    def submit(self, task: ExtractionTask) -> bool:
+        """Encola una tarea sin bloquear la petición HTTP si la cola está llena."""
+        try:
+            self._queue.put_nowait(task)
+        except Full:
+            return False
+        return True
 
     def stop(self, timeout: float = 2) -> None:
         self._stop_event.set()
-        self._queue.put(None)
-        if self._thread is not None:
-            self._thread.join(timeout=timeout)
+        alive_threads = [thread for thread in self._threads if thread.is_alive()]
+        if not alive_threads:
+            while True:
+                try:
+                    task = self._queue.get_nowait()
+                except Empty:
+                    break
+                if task is not None:
+                    task.password = ""
+                self._queue.task_done()
+            self._threads = []
+            return
+        for _ in alive_threads:
+            self._queue.put(None)
+        for thread in alive_threads:
+            thread.join(timeout=timeout)
+        self._threads = []
 
     def _run(self) -> None:
-        while not self._stop_event.is_set():
+        while True:
             task = self._queue.get()
             try:
                 if task is None:
@@ -89,6 +126,16 @@ class ExtractionWorker:
 
         result = error.pop("result", None)
         if result is not None and result.get("success"):
+            try:
+                if self.on_completed is not None:
+                    with self._completion_lock:
+                        self.on_completed(task.matricola, task.carpool)
+            except Exception:
+                self.job_store.mark_failed(
+                    task.job_id,
+                    "La extracción terminó, pero no se pudieron guardar los datos de conducción.",
+                )
+                return
             self.job_store.mark_completed(task.job_id, "Extracción completada.")
         else:
             self.job_store.mark_failed(

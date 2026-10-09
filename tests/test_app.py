@@ -4,8 +4,11 @@ from services.registration_service import RegistrationService
 
 
 class FakeStudentManager:
+    def __init__(self, existing=None):
+        self.existing = existing
+
     def obtener_estudiante(self, matricola):
-        return None
+        return self.existing
 
 
 class FakeScheduler:
@@ -69,3 +72,35 @@ def test_register_rejects_duplicate_pending_job():
 
     assert client.post("/students/register", json=payload).status_code == 202
     assert client.post("/students/register", json=payload).status_code == 409
+
+
+def test_refresh_accepts_existing_student_and_blocks_repeated_request(monkeypatch):
+    service = RegistrationService(FakeStudentManager(existing={"matricola": "171532"}))
+    extraction = ExtractionService(FakeScheduler())
+    client = create_app(service, InMemoryJobStore(), extraction).test_client()
+    monkeypatch.setenv("REFRESH_COOLDOWN_SECONDS", "900")
+    payload = {
+        "matricola": "171532",
+        "password": "PortalPass123",
+        "consentimiento": True,
+    }
+
+    first = client.post("/students/refresh", json=payload)
+    second = client.post("/students/refresh", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+    assert "password" not in str(second.get_json()).lower()
+
+
+def test_refresh_rejects_unknown_student():
+    client = make_client()
+
+    response = client.post("/students/refresh", json={
+        "matricola": "171532",
+        "password": "PortalPass123",
+        "consentimiento": True,
+    })
+
+    assert response.status_code == 400
+    assert "matricola" in response.get_json()["errors"]
