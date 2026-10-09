@@ -119,6 +119,65 @@ Para salir del entorno virtual:
 deactivate
 ```
 
+### Servicios de aplicación
+
+La lógica reutilizable para la futura interfaz web se encuentra en
+`services/`. `RegistrationService` valida solicitudes y evita duplicar
+matrículas; `ExtractionService` encapsula `StudentScheduler`. Ninguno guarda
+contraseñas del portal en Markdown, logs o configuración. La CLI existente
+continúa funcionando de forma independiente; la cola de trabajos y Flask se
+incorporarán en fases posteriores.
+
+La fase web inicial está disponible en `app.py`. Para ejecutarla localmente:
+
+```powershell
+.\.venv\Scripts\python.exe app.py
+```
+
+Incluye `/health`, `POST /students/register` y `GET /jobs/<id>`. Las
+solicitudes se colocan en una cola local consumida por un único worker. Los
+estados posibles son `pending`, `processing`, `completed` y `failed`. La
+contraseña del portal se conserva únicamente en memoria mientras el worker
+procesa la extracción; no se incluye en respuestas, logs ni archivos. Los
+Los metadatos se conservan en `JOB_STORE_PATH` (por defecto,
+`datos/.pug_jobs.json`). Si el proceso se reinicia, los trabajos que estaban
+`pending` o `processing` se marcan como `failed`, porque sus contraseñas no se
+persisten y deben volver a enviarse de forma explícita.
+
+### Almacenamiento Markdown en carpeta SMB del QNAP
+
+PUG puede conservar el almacenamiento Markdown sin usar SQL. Para una
+instalación interna pequeña, basta con que Windows tenga acceso al recurso
+compartido y que `DATOS_PATH` apunte a su ruta UNC:
+
+```env
+DATOS_PATH=\\10.0.0.7\.private
+```
+
+La autenticación SMB no se guarda en `.env`, en el código ni en comandos del
+repositorio. Configura el acceso desde Windows con las credenciales del
+recurso, preferiblemente mediante **Administrador de credenciales** o
+mapeando la unidad desde el Explorador de archivos. Si utilizas PowerShell,
+Windows solicitará la contraseña de forma interactiva:
+
+```powershell
+net use \\10.0.0.7\.private /user:USUARIO_DEL_RECURSO *
+```
+
+No añadas la contraseña al comando. La ruta compartida debe conceder al
+usuario permisos de lectura, escritura y creación de carpetas. Una vez
+autenticado Windows, verifica el recurso:
+
+```powershell
+Test-Path '\\10.0.0.7\.private'
+```
+
+PUG crea dentro de esa ruta las carpetas `estudiantes`, `carros`, `viajes` y
+las demás colecciones cuando se ejecuta `test_connection()` desde la CLI.
+Antes de usar datos reales, prueba desde **Sistema / Configuración →
+Verificar almacenamiento** y confirma que se puede crear y eliminar el
+archivo de prueba.
+
 ## Configuración
 
 1. Copia `.env.example` como `.env`.
